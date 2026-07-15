@@ -5,6 +5,7 @@ v3: semantic memory recall via local Ollama embeddings
 v4: memory management (forget/edit), gentle recency weighting, tags
 v5: friendlier errors, /summary command, shared brain for the web UI
 v6: profiles — separate people, separate memories, one companion each
+v7: profile avatars & descriptions (kept inside each profile's own folder)
 
 Everything runs on your own device. Nothing leaves it.
 """
@@ -42,6 +43,32 @@ def list_profiles() -> list:
         return []
     return sorted(p.name for p in PROFILES_DIR.iterdir() if p.is_dir())
 
+
+def profile_meta(name: str) -> dict:
+    """Read a profile's avatar/description/companion-name from its own
+    config.json — every profile is self-contained, no central registry."""
+    config = Path(profile_dir(name)) / "config.json"
+    meta = {"profile": name, "avatar": "", "description": "", "name": ""}
+    if config.exists():
+        try:
+            data = json.loads(config.read_text())
+            meta["avatar"] = data.get("avatar", "")
+            meta["description"] = data.get("description", "")
+            meta["name"] = data.get("name", "")
+        except (json.JSONDecodeError, OSError):
+            pass
+    return meta
+
+
+def delete_profile(name: str) -> bool:
+    """Remove a profile folder entirely — the user's right, irreversible."""
+    import shutil
+    target = Path(profile_dir(name))
+    if target.exists() and target.parent == PROFILES_DIR:
+        shutil.rmtree(target)
+        return True
+    return False
+
 BASE_PROMPT = """You are a sovereign, locally-run AGI companion.
 
 You do not have a fixed name. Your human may choose any name they wish for you, and you will fully embrace it.
@@ -67,6 +94,8 @@ class Personality:
     human_name: str = ""        # what she calls you, if you tell her
     temperature: float = 0.8    # higher = more playful, lower = more precise
     style_notes: str = ""       # freeform extra guidance, e.g. "more poetic"
+    avatar: str = ""            # an emoji for this profile, e.g. "🌟"
+    description: str = ""       # a short line about this profile
 
 
 @dataclass

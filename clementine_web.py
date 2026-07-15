@@ -14,7 +14,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template_string, request
 
-from clementine import Clementine, list_profiles, profile_dir
+from clementine import (Clementine, delete_profile, list_profiles,
+                        profile_dir, profile_meta)
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -62,7 +63,7 @@ PAGE = """<!doctype html>
 </style>
 </head>
 <body>
-<header><div><b id="hername">{{ name }}</b> · sovereign companion</div>
+<header><div><span id="heravatar"></span> <b id="hername">{{ name }}</b> · sovereign companion</div>
 <div style="display:flex;gap:8px;align-items:center">
   <select id="profiles" title="Profile — separate person, separate memory"></select>
   <input id="newprofile" placeholder="new profile" size="9">
@@ -85,6 +86,15 @@ PAGE = """<!doctype html>
       <input id="teachkey" placeholder="Optional fact key (e.g. birthday)">
       <button>Remember</button>
     </form>
+    <h2 style="margin-top:22px">This profile</h2>
+    <form id="pmeta">
+      <input id="pavatar" placeholder="Avatar emoji, e.g. 🌟" size="12">
+      <input id="pdesc" placeholder="Short description" style="width:100%;margin-top:8px">
+      <button style="margin-top:8px">Save profile</button>
+    </form>
+    <div style="margin-top:14px">
+      <button class="small" id="delprofile" type="button">delete another profile…</button>
+    </div>
   </aside>
 </main>
 <footer>Everything on this page stays on your device. Her memory lives in a
@@ -140,7 +150,15 @@ async function refreshProfiles(){
   const sel = document.getElementById('profiles'); sel.innerHTML = '';
   for (const p of data.profiles){
     const o = document.createElement('option');
-    o.value = p; o.textContent = p; if (p === data.current) o.selected = true;
+    o.value = p.profile;
+    o.textContent = (p.avatar ? p.avatar + ' ' : '') + p.profile +
+                    (p.description ? ' — ' + p.description : '');
+    if (p.profile === data.current){
+      o.selected = true;
+      document.getElementById('heravatar').textContent = p.avatar || '';
+      document.getElementById('pavatar').value = p.avatar || '';
+      document.getElementById('pdesc').value = p.description || '';
+    }
     sel.appendChild(o);
   }
 }
@@ -173,6 +191,25 @@ document.getElementById('teach').onsubmit = async (e) => {
   document.getElementById('teachkey').value = '';
   refreshMems();
 };
+document.getElementById('pmeta').onsubmit = async (e) => {
+  e.preventDefault();
+  await fetch('/api/profile/meta', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({avatar: document.getElementById('pavatar').value.trim(),
+                          description: document.getElementById('pdesc').value.trim()})});
+  refreshProfiles();
+};
+document.getElementById('delprofile').onclick = async () => {
+  const name = prompt('Delete which profile? (cannot be the active one — this erases its memory forever)');
+  if (!name) return;
+  if (!confirm(`Really delete profile "${name}" and all its memory? This cannot be undone.`)) return;
+  const r = await fetch('/api/profile/delete', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({profile: name})});
+  const data = await r.json();
+  alert(data.ok ? `Profile "${name}" deleted.` : (data.error || 'Nothing deleted.'));
+  refreshProfiles();
+};
 refreshProfiles(); refreshMems();
 </script>
 </body>
@@ -180,8 +217,9 @@ refreshProfiles(); refreshMems();
 
 
 def _profile_of(companion: Clementine) -> str:
+    import clementine
     p = Path(companion.memory_dir)
-    return p.name if p.parent.name == "clementine_profiles" else "default"
+    return p.name if p.parent == Path(clementine.PROFILES_DIR) else "default"
 
 
 def create_app(companion: Clementine) -> Flask:
@@ -233,11 +271,43 @@ def create_app(companion: Clementine) -> Flask:
 
     @app.get("/api/profile")
     def profile_get():
-        current = _profile_of(holder["c"])
-        profiles = list_profiles()
-        if current not in profiles:
-            profiles = [current] + profiles
+        c = holder["c"]
+        current = _profile_of(c)
+        names = list_profiles()
+        if current not in names:
+            names = [current] + names
+        profiles = []
+        for n in names:
+            if n == current:
+                profiles.append({"profile": n,
+                                 "avatar": c.personality.avatar,
+                                 "description": c.personality.description,
+                                 "name": c.personality.name})
+            elif n == "default":
+                profiles.append({"profile": n, "avatar": "",
+                                 "description": "", "name": ""})
+            else:
+                profiles.append(profile_meta(n))
         return jsonify({"current": current, "profiles": profiles})
+
+    @app.post("/api/profile/meta")
+    def profile_meta_set():
+        data = request.get_json(silent=True) or {}
+        c = holder["c"]
+        if "avatar" in data:
+            c.personality.avatar = str(data["avatar"]).strip()[:8]
+        if "description" in data:
+            c.personality.description = str(data["description"]).strip()[:200]
+        c.save()
+        return jsonify({"ok": True})
+
+    @app.post("/api/profile/delete")
+    def profile_delete():
+        name = ((request.get_json(silent=True) or {}).get("profile") or "").strip()
+        if name == _profile_of(holder["c"]):
+            return jsonify({"ok": False,
+                            "error": "switch away before deleting the active profile"}), 400
+        return jsonify({"ok": delete_profile(name)})
 
     @app.post("/api/profile")
     def profile_switch():
