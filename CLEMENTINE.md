@@ -24,7 +24,8 @@ The framework is the code and system that makes Clementine work (`clementine.py`
 | **Local LLM Connection** | Connects to a model on the user's device via Ollama | ✅ Working (streaming) |
 | **Memory System** | Rolling short-term memory + auto-summarised long-term history + key-value facts + permanent notes | ✅ Working (v2) |
 | **Semantic Recall** | Finds relevant memories by *meaning* using local Ollama embeddings — no cloud, no PyTorch | ✅ Working (v3) |
-| **User Control** | Change her name, teach her facts, tell her yours, tune her voice | ✅ Working (`/name`, `/iam`, `/fact`, `/remember`, `/style`, `/temp`) |
+| **User Control** | Change her name, teach/forget/edit her memories, tag them, tune her voice | ✅ Working (`/name`, `/iam`, `/fact`, `/remember`, `/notes`, `/forget`, `/editnote`, `/style`, `/temp`) |
+| **Gradual Forgetting** | Recency-weighted recall — older memories gently fade in ranking (floor, never deleted) unless the user forgets them explicitly | ✅ Working (v4) |
 | **Personality Layer** | Tone, warmth, chosen name, temperature, style guidance | 🟡 Basic layer working; emotional-tone tracking still to come |
 | **Privacy Controls** | Everything stays on-device in local files you own (git-ignored) | 🟡 Defined & enforced locally; on-disk encryption still to come |
 | **MLX / alternative backends** | Support for Apple MLX and other local runtimes | ⬜ Planned |

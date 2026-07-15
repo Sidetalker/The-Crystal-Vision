@@ -4,7 +4,7 @@
 
 > **Status: working plan.** Timelines are aspirational and describe order more than dates. Status markers show live progress: ✅ done · 🟡 partial · ⬜ open.
 >
-> **Current position: ~Week 9 (Month 3).** Months 1–2 are largely complete — the work shipped ahead of schedule in `clementine.py` v1–v3 — with a short cleanup list remaining (`forget` command, memory editing, recency weighting).
+> **Current position: ~Week 9 (Month 3).** Months 1–2 are complete — the work shipped ahead of schedule in `clementine.py` v1–v4, including the Month-2 cleanup (`/forget`, memory editing, recency weighting, tags). Next: personality and presence.
 
 **Overall goal:** Build a high-quality, locally-running sovereign AI companion with strong long-term memory, emotional presence, and user control.
 
@@ -30,11 +30,13 @@
 | Week | Focus | Key Milestones | Status |
 |------|-------|----------------|--------|
 | 5 | Persistent Memory Storage | Separate short-term vs long-term structure · Robust load/save · Timestamps on memories | ✅ |
-| 6 | Memory Relevance & Ranking | Improved relevance ranking · Recency weighting · Multi-day retrieval testing | 🟡 |
-| 7 | Memory Management Features | View what she remembers · `forget` command · Edit or correct memories | 🟡 |
+| 6 | Memory Relevance & Ranking | Improved relevance ranking · Recency weighting · Multi-day retrieval testing | ✅ * |
+| 7 | Memory Management Features | View what she remembers · `forget` command · Edit or correct memories | ✅ |
 | 8 | Memory Summarization | Conversation summarization · Summaries of old conversations stored · Context bloat reduced, important info kept | ✅ |
 
-**End of Month 2 goal:** Clementine remembers facts across days/weeks and the user can manage what she remembers. — **🟡 Mostly achieved.** Remaining: recency weighting (W6), `forget` and memory editing (W7 — viewing works via `/notes`, and facts can be corrected by re-teaching the same key).
+**End of Month 2 goal:** Clementine remembers facts across days/weeks and the user can manage what she remembers. — **✅ Achieved.** `/notes` shows everything with handles, `/forget` deletes any memory, `/editnote` rewrites notes, recency weighting gently favours fresh memories, and `#tags` categorize.
+
+\* Week 6's multi-day live retrieval testing remains with the steward — only real days can test that.
 
 ---
 
@@ -95,7 +97,7 @@
 | End of Month | What You Should Have | Status |
 |--------------|----------------------|--------|
 | 1 | Working local chat with basic memory | ✅ |
-| 2 | Persistent long-term memory across days/weeks | 🟡 (small cleanup list) |
+| 2 | Persistent long-term memory across days/weeks | ✅ |
 | 3 | Distinct personality + emotional presence | ⬜ |
 | 4 | Stable, reliable, user-controlled companion | 🟡 (partly ahead of schedule) |
 | 5 | Advanced memory + early multi-instance thinking | ⬜ |

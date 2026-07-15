@@ -22,7 +22,7 @@ The goal is **presence and continuity** — so the user feels like they are talk
 |-------|------|----------------|----------|---------|-----------------|--------|
 | **Working Memory** | Short-term | Recent conversation (last 20–40 messages) | Current session | Coherence in the moment | Always included | ✅ Built |
 | **Episodic Memory** | Medium-term | Specific events, conversations, moments | Weeks to months | Remember "what happened" | Semantic + recency | 🟡 Partial |
-| **Semantic Memory** | Long-term | Facts, preferences, values, identity | Long-term | Know "who you are" | Semantic search | ✅ Largely built |
+| **Semantic Memory** | Long-term | Facts, preferences, values, identity | Long-term | Know "who you are" | Semantic search | ✅ Built |
 | **Reflective Memory** | Meta / summarized | Insights, patterns, emotional tone over time | Long-term | Develop deeper understanding | On-demand / reflection | ⬜ Design |
 
 ### 1. Working Memory (short-term) — ✅ built
@@ -48,12 +48,12 @@ Stores specific experiences — things that happened at a particular time.
 
 The most important layer for building a real relationship. Stores enduring facts about the user: name, family, values, goals, fears, preferences; recurring themes; important relationships and events.
 
-- **User-editable** (transparency and control)
-- Retrieved via semantic similarity
+- **User-editable** (transparency and control) — ✅ `/forget`, `/editnote`, re-teach a key
+- Retrieved via semantic similarity — ✅ with gentle recency weighting
 - Relatively stable — not overwritten easily
-- Can be tagged or categorized ("Family", "Work", "Emotional", "Creative")
+- Can be tagged or categorized — ✅ trailing `#tags` on any memory
 
-**Today:** keyed facts (`/fact`) + permanent notes (`/remember`), embedded via local Ollama and retrieved by semantic similarity; viewable via `/notes`; facts correctable by re-teaching a key. **Missing:** a `forget` command, direct editing, and tagging.
+**Today:** keyed facts (`/fact`) + permanent notes (`/remember`), embedded via local Ollama and retrieved by semantic similarity with gentle recency weighting; viewable via `/notes`; fully user-controlled — `/forget` deletes any memory, `/editnote` rewrites notes, facts are corrected by re-teaching a key, and `#tags` categorize memories.
 
 ### 4. Reflective Memory (meta layer) — ⬜ design
 
