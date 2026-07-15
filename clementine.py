@@ -6,6 +6,7 @@ v3: semantic memory recall via local Ollama embeddings
 Everything runs on your own device. Nothing leaves it.
 """
 
+import argparse
 import json
 import math
 import sys
@@ -312,14 +313,28 @@ HELP = """Commands:
   /notes            show everything she's been asked to remember
   /style <text>     tune her voice, e.g. /style more poetic, fewer questions
   /temp <0.0-1.5>   set temperature (playfulness)
+  /model <tag>      switch the local model, e.g. /model llama3.2:3b
   /exit             say goodbye (everything is saved automatically)
 """
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Clementine — a sovereign, locally-run AI companion.")
+    parser.add_argument(
+        "--model", default="llama3.1:8b",
+        help="Ollama model tag. Pick one that fits your hardware, e.g. "
+             "llama3.1:8b (default, Q4_K_M — the sweet spot), "
+             "llama3.1:8b-instruct-q5_K_M (higher quality), or "
+             "llama3.2:3b (lighter machines).")
+    parser.add_argument(
+        "--memory-dir", default="clementine_memory",
+        help="Where her memory is stored on this device.")
+    args = parser.parse_args()
+
     print("Starting Clementine (local mode)...")
     print("Make sure Ollama is running with a model loaded.\n")
 
-    companion = Clementine(model="llama3.1:8b")  # change model if needed
+    companion = Clementine(model=args.model, memory_dir=args.memory_dir)
 
     name = companion.personality.name or "Clementine"
     returning = bool(companion.memory.conversation or companion.memory.summaries)
@@ -374,6 +389,9 @@ def main():
                 print(f"[Temperature set to {companion.personality.temperature}.]\n")
             except ValueError:
                 print("[Please give a number, e.g. /temp 0.8]\n")
+        elif user_input.lower().startswith("/model "):
+            companion.model = user_input[7:].strip()
+            print(f"[Now using model: {companion.model}]\n")
         else:
             print(f"{name}: ", end="", flush=True)
             companion.chat(user_input, stream_to=sys.stdout)

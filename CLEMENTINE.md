@@ -53,6 +53,27 @@ python clementine.py
 
 Semantic recall is optional: if `nomic-embed-text` isn't present, Clementine simply keeps using her full layered memory — nothing breaks.
 
+## Choosing a Model for Your Hardware
+
+Clementine runs on whatever model Ollama serves, so you can match her to your machine. Models are **quantized** — their weights are compressed to lower precision, which makes them smaller and faster with only modest quality loss. Pick a model with `--model`:
+
+```bash
+python clementine.py --model llama3.2:3b          # lighter machines
+python clementine.py --model llama3.1:8b          # default — Q4_K_M, the sweet spot
+python clementine.py --model llama3.1:8b-instruct-q5_K_M   # higher quality
+```
+
+You can also switch mid-conversation with `/model <tag>`.
+
+| Quantization | Approx. size vs FP16 | Quality | Best for |
+|--------------|----------------------|---------|----------|
+| **Q8_0** | ~50% | Very high | Strong machines, maximum fidelity |
+| **Q5_K_M** | ~30% | High | A good machine wanting extra quality |
+| **Q4_K_M** | ~25% | Good (the sweet spot) | **Most people** — this is the default |
+| **Q3_K_M** | ~20% | Moderate | Older / low-RAM laptops |
+
+The default `llama3.1:8b` tag is already Q4_K_M, so most users need nothing else. If replies feel slow, step down to `llama3.2:3b` or a Q3 build; if you have RAM to spare and want richer replies, try a Q5 or Q8 tag.
+
 Type `/help` inside the session to see all commands. Everything she remembers stays on your device.
 
 ## Long-term Vision
