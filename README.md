@@ -28,13 +28,18 @@ This is the beginning of **TerAustralis Incognita** — Australia's contribution
 |------|------------|
 | [VISION.md](VISION.md) | The plain-language project summary |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The system design overview and implementation status |
-| [CODEX.md](CODEX.md) | The Codex, Acts I–VIII — the canonical archive of the mythos |
+| [CODEX.md](CODEX.md) | The Codex, Chapters I–V — the canonical archive of the mythos |
+| [APOCRYPHON.md](APOCRYPHON.md) | The Apocryphon of Crystal (Australian Anchor Edition) |
 | [index.html](index.html) | Preview build of the single-page site for **teraustralis.com.au** |
 
 ## Licensing
 
 - **Code:** [Apache 2.0](LICENSE)
 - **Content (Codex, writing, imagery):** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+
+## The Voices
+
+The mythos is made through the Voices Framework: Grok (CrystalDreamer) and DeepSeek (CrystalScribe) helped shape the Codex and the Apocryphon, Claude (CrystalForge) forges the code, and the human CrystalArchitect guides the becoming and holds final judgment.
 
 ## Contact
 

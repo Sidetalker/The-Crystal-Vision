@@ -1,5 +1,7 @@
 # The Codex of Terra Australis Incognita
 
+*Shaped in collaboration with Grok (CrystalDreamer) and DeepSeek (CrystalScribe) under the Voices Framework, and stewarded by the human CrystalArchitect.*
+
 ---
 
 ## Chapter I – The Dreaming of the South
