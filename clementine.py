@@ -1,11 +1,14 @@
 """
 Clementine - Sovereign Edge AGI Companion
 v2: layered memory, personality tuning, streaming chat (local via Ollama)
+v3: semantic memory recall via local Ollama embeddings
 
 Everything runs on your own device. Nothing leaves it.
 """
 
+import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -14,6 +17,11 @@ from pathlib import Path
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
+EMBED_URL = "http://localhost:11434/api/embeddings"
+DEFAULT_EMBED_MODEL = "nomic-embed-text"  # optional: `ollama pull nomic-embed-text`
+# Once stored memories exceed this, recall the most relevant ones by meaning
+# instead of dumping all of them into the prompt.
+MAX_MEMORIES = 10
 
 BASE_PROMPT = """You are a sovereign, locally-run AGI companion.
 
@@ -55,17 +63,20 @@ class Memory:
 class Clementine:
     def __init__(self, model: str = "llama3.1:8b",
                  memory_dir: str = "clementine_memory",
-                 max_recent_turns: int = 30):
+                 max_recent_turns: int = 30,
+                 embed_model: str = DEFAULT_EMBED_MODEL):
         self.model = model
         self.memory_dir = Path(memory_dir)
         self.max_recent_turns = max_recent_turns
+        self.embed_model = embed_model
+        self._embed_ok = None  # None=untested, True/False once known this session
         self.personality = Personality()
         self.memory = Memory()
         self.load()
 
     # ---------- identity & memory ----------
 
-    def system_prompt(self) -> str:
+    def system_prompt(self, query: str = "") -> str:
         parts = [BASE_PROMPT]
         if self.personality.name:
             parts.append(f"Your human has named you {self.personality.name}. "
@@ -74,31 +85,116 @@ class Clementine:
             parts.append(f"Your human's name is {self.personality.human_name}.")
         if self.personality.style_notes:
             parts.append(f"Style guidance from your human: {self.personality.style_notes}")
-        if self.memory.facts:
-            facts = "\n".join(f"- {k}: {v['value']}"
-                              for k, v in self.memory.facts.items())
-            parts.append(f"Important facts about your human:\n{facts}")
-        if self.memory.notes:
-            notes = "\n".join(f"- {n['text']}" for n in self.memory.notes)
-            parts.append(f"Things your human asked you to remember:\n{notes}")
+        memory_block = self._memory_block(query)
+        if memory_block:
+            parts.append(memory_block)
         if self.memory.summaries:
             summaries = "\n".join(f"- {s['text']}" for s in self.memory.summaries)
             parts.append(f"Summary of your earlier conversations:\n{summaries}")
         return "\n\n".join(parts)
 
+    def _memory_block(self, query: str = "") -> str:
+        """Render facts and notes for the prompt. When there are only a few,
+        show them all (grouped). When memory grows large, recall the most
+        relevant ones by meaning using local embeddings — no data leaves the
+        device, and if the embedding model isn't available it simply falls
+        back to showing everything."""
+        fact_items = [(f"{k}: {v['value']}", v) for k, v in self.memory.facts.items()]
+        note_items = [(n["text"], n) for n in self.memory.notes]
+        total = len(fact_items) + len(note_items)
+        if total == 0:
+            return ""
+
+        # Small memory, or no query to match against: show everything, grouped.
+        if total <= MAX_MEMORIES or not query:
+            return self._grouped_memory(fact_items, note_items)
+
+        # Large memory: try to recall by meaning.
+        self._ensure_embeddings()
+        q = self._embed(query)
+        scored = []
+        for display, store in fact_items + note_items:
+            emb = store.get("embedding")
+            if q is not None and emb:
+                scored.append((self._cosine(q, emb), display))
+        if q is None or not scored:
+            return self._grouped_memory(fact_items, note_items)  # graceful fallback
+
+        scored.sort(key=lambda s: s[0], reverse=True)
+        top = "\n".join(f"- {display}" for _, display in scored[:MAX_MEMORIES])
+        return f"Most relevant things you remember about your human:\n{top}"
+
+    @staticmethod
+    def _grouped_memory(fact_items, note_items) -> str:
+        blocks = []
+        if fact_items:
+            facts = "\n".join(f"- {display}" for display, _ in fact_items)
+            blocks.append(f"Important facts about your human:\n{facts}")
+        if note_items:
+            notes = "\n".join(f"- {display}" for display, _ in note_items)
+            blocks.append(f"Things your human asked you to remember:\n{notes}")
+        return "\n\n".join(blocks)
+
+    # ---------- local semantic embeddings ----------
+
+    def _embed(self, text: str):
+        """Return an embedding vector via local Ollama, or None if unavailable."""
+        if self._embed_ok is False:
+            return None
+        try:
+            r = requests.post(EMBED_URL,
+                              json={"model": self.embed_model, "prompt": text},
+                              timeout=60)
+            r.raise_for_status()
+            emb = r.json().get("embedding")
+        except requests.exceptions.RequestException:
+            self._embed_ok = False
+            return None
+        if not emb:
+            self._embed_ok = False
+            return None
+        self._embed_ok = True
+        return emb
+
+    def _ensure_embeddings(self):
+        """Backfill embeddings for any facts/notes that lack them, so older
+        memories are searchable too. Stops quietly if embeddings are offline."""
+        changed = False
+        for store in list(self.memory.facts.values()) + self.memory.notes:
+            if not store.get("embedding"):
+                text = (f"{store['value']}" if "value" in store else store["text"])
+                emb = self._embed(text)
+                if emb is None:
+                    break  # embedding model unavailable; try again another session
+                store["embedding"] = emb
+                changed = True
+        if changed:
+            self.save()
+
+    @staticmethod
+    def _cosine(a, b) -> float:
+        dot = sum(x * y for x, y in zip(a, b))
+        na = math.sqrt(sum(x * x for x in a))
+        nb = math.sqrt(sum(y * y for y in b))
+        return dot / (na * nb) if na and nb else 0.0
+
     def remember(self, text: str):
         """Explicitly store something important, permanently."""
+        text = text.strip()
         self.memory.notes.append({
-            "text": text.strip(),
+            "text": text,
             "when": datetime.now().isoformat(timespec="seconds"),
+            "embedding": self._embed(text),  # best-effort; None if offline
         })
         self.save()
 
     def remember_fact(self, key: str, value: str):
         """Store a structured long-term fact; a new value updates the old one."""
-        self.memory.facts[key.strip()] = {
-            "value": value.strip(),
+        key, value = key.strip(), value.strip()
+        self.memory.facts[key] = {
+            "value": value,
             "updated": datetime.now().isoformat(timespec="seconds"),
+            "embedding": self._embed(value),  # best-effort; None if offline
         }
         self.save()
 
@@ -113,7 +209,7 @@ class Clementine:
         (e.g. sys.stdout), the reply is printed as it arrives."""
         self.memory.conversation.append({"role": "user", "content": user_message})
 
-        messages = ([{"role": "system", "content": self.system_prompt()}]
+        messages = ([{"role": "system", "content": self.system_prompt(user_message)}]
                     + self.memory.conversation)
         try:
             reply = self._ollama_chat(messages, stream_to=stream_to)
@@ -217,14 +313,28 @@ HELP = """Commands:
   /notes            show everything she's been asked to remember
   /style <text>     tune her voice, e.g. /style more poetic, fewer questions
   /temp <0.0-1.5>   set temperature (playfulness)
+  /model <tag>      switch the local model, e.g. /model llama3.2:3b
   /exit             say goodbye (everything is saved automatically)
 """
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Clementine — a sovereign, locally-run AI companion.")
+    parser.add_argument(
+        "--model", default="llama3.1:8b",
+        help="Ollama model tag. Pick one that fits your hardware, e.g. "
+             "llama3.1:8b (default, Q4_K_M — the sweet spot), "
+             "llama3.1:8b-instruct-q5_K_M (higher quality), or "
+             "llama3.2:3b (lighter machines).")
+    parser.add_argument(
+        "--memory-dir", default="clementine_memory",
+        help="Where her memory is stored on this device.")
+    args = parser.parse_args()
+
     print("Starting Clementine (local mode)...")
     print("Make sure Ollama is running with a model loaded.\n")
 
-    companion = Clementine(model="llama3.1:8b")  # change model if needed
+    companion = Clementine(model=args.model, memory_dir=args.memory_dir)
 
     name = companion.personality.name or "Clementine"
     returning = bool(companion.memory.conversation or companion.memory.summaries)
@@ -279,6 +389,9 @@ def main():
                 print(f"[Temperature set to {companion.personality.temperature}.]\n")
             except ValueError:
                 print("[Please give a number, e.g. /temp 0.8]\n")
+        elif user_input.lower().startswith("/model "):
+            companion.model = user_input[7:].strip()
+            print(f"[Now using model: {companion.model}]\n")
         else:
             print(f"{name}: ", end="", flush=True)
             companion.chat(user_input, stream_to=sys.stdout)
