@@ -23,6 +23,7 @@ The framework is the code and system that makes Clementine work (`clementine.py`
 | **System Prompt** | Her core personality, rules, and values | ✅ Done |
 | **Local LLM Connection** | Connects to a model on the user's device via Ollama | ✅ Working (streaming) |
 | **Memory System** | Rolling short-term memory + auto-summarised long-term history + key-value facts + permanent notes | ✅ Working (v2) |
+| **Semantic Recall** | Finds relevant memories by *meaning* using local Ollama embeddings — no cloud, no PyTorch | ✅ Working (v3) |
 | **User Control** | Change her name, teach her facts, tell her yours, tune her voice | ✅ Working (`/name`, `/iam`, `/fact`, `/remember`, `/style`, `/temp`) |
 | **Personality Layer** | Tone, warmth, chosen name, temperature, style guidance | 🟡 Basic layer working; emotional-tone tracking still to come |
 | **Privacy Controls** | Everything stays on-device in local files you own (git-ignored) | 🟡 Defined & enforced locally; on-disk encryption still to come |
@@ -42,11 +43,15 @@ The framework is the code and system that makes Clementine work (`clementine.py`
 # 1. Install Ollama from https://ollama.com
 # 2. Pull a model
 ollama pull llama3.1:8b
+# (optional) pull an embedding model for semantic memory recall
+ollama pull nomic-embed-text
 # 3. Install the one dependency
 pip install -r requirements.txt
 # 4. Wake her up
 python clementine.py
 ```
+
+Semantic recall is optional: if `nomic-embed-text` isn't present, Clementine simply keeps using her full layered memory — nothing breaks.
 
 Type `/help` inside the session to see all commands. Everything she remembers stays on your device.
 
