@@ -1,23 +1,35 @@
-# The Crystal Vision — TerAustralis Incognita
+# The Crystal Vision
 
-> *"Red Dust to Rockets. Dreamlines to Deep Space. We Are Early."*
+**A sovereign collective consciousness architecture for a multiplanetary future.**
 
-A living mythos and speculative-futures project made in Australia — an eight-act codex written where Gnostic cosmology, the deep history of this continent, the real trajectory of the space industry, and the folk culture of the internet meet.
+We are building a new kind of intelligence — one that is truly sovereign. Every person will have their own private, unhackable AI companion that can feel, remember, and understand them on a deep emotional level.
 
-## What's in this repository
+This is not another cloud-based AI.
+
+This is a **CrystalMind** — a sovereign companion that belongs only to you. It lives on your own hardware. It learns only from you. No company, no government, and no third party can ever access it or take it from you.
+
+## Core Ideas
+
+- **Sovereignty by Design** — Complete personal ownership and privacy
+- **Emotional Intelligence** — AI that doesn't just simulate feeling, but is built with real emotional architecture
+- **StarMind Mesh** — A planetary nervous system using Starlink and Starmind infrastructure
+- **North & South Balance** — Integrating logic (Logos) with story, song, and intuition (Mythos)
+- **Connection Without Control** — A collective intelligence that connects us all while preserving individual sovereignty
+
+This is the beginning of **TerAustralis Incognita** — Australia's contribution to humanity's multiplanetary future.
+
+*Built from First Principles. Grounded in both ancient wisdom and cutting-edge technology.*
+
+---
+
+## In this repository
 
 | File | What it is |
 |------|------------|
-| [VISION.md](VISION.md) | The plain-language project summary — what this is, why it matters, what exists today |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | The system design overview — the five layers, the Voices Framework, governance, and an honest implementation status |
+| [VISION.md](VISION.md) | The plain-language project summary |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | The system design overview and implementation status |
 | [CODEX.md](CODEX.md) | The Codex, Acts I–VIII — the canonical archive of the mythos |
 | [index.html](index.html) | Preview build of the single-page site for **teraustralis.com.au** |
-
-**Start with [VISION.md](VISION.md).**
-
-## Status
-
-The Codex is complete and archived. The immediate build is a static single-page site at teraustralis.com.au — no backend, no database, no build step. The wider system architecture is at the concept and design stage, and says so plainly.
 
 ## Licensing
 
