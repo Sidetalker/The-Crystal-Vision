@@ -16,7 +16,16 @@ She is designed to be a truly personal, locally-run AI that belongs only to one 
 
 ## The Framework — Components & Status
 
-The framework is the code and system that makes Clementine work (`clementine.py`).
+The framework is called **CrystalCore** — the engine of memory, profiles, and presence (the `crystalcore/` package). **Clementine** is the first persona who lives on it. Entry points: `clementine.py` (terminal) and `clementine_web.py` (browser).
+
+```
+crystalcore/            the framework
+├── companion.py        the brain: memory layers, recall, chat
+├── memory.py           the data model (Personality, Memory)
+└── profiles.py         self-contained profiles
+clementine.py           terminal interface
+clementine_web.py       local web interface
+```
 
 | Component | Purpose | Status |
 |-----------|---------|--------|

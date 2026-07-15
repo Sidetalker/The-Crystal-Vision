@@ -14,8 +14,9 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template_string, request
 
-from clementine import (Clementine, delete_profile, list_profiles,
-                        profile_dir, profile_meta)
+from crystalcore import (Clementine, delete_profile, list_profiles,
+                         profile_dir, profile_meta)
+from crystalcore import profiles as _profiles
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -217,9 +218,8 @@ refreshProfiles(); refreshMems();
 
 
 def _profile_of(companion: Clementine) -> str:
-    import clementine
     p = Path(companion.memory_dir)
-    return p.name if p.parent == Path(clementine.PROFILES_DIR) else "default"
+    return p.name if p.parent == Path(_profiles.PROFILES_DIR) else "default"
 
 
 def create_app(companion: Clementine) -> Flask:
