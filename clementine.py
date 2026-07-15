@@ -4,6 +4,7 @@ v2: layered memory, personality tuning, streaming chat (local via Ollama)
 v3: semantic memory recall via local Ollama embeddings
 v4: memory management (forget/edit), gentle recency weighting, tags
 v5: friendlier errors, /summary command, shared brain for the web UI
+v6: profiles — separate people, separate memories, one companion each
 
 Everything runs on your own device. Nothing leaves it.
 """
@@ -24,6 +25,22 @@ DEFAULT_EMBED_MODEL = "nomic-embed-text"  # optional: `ollama pull nomic-embed-t
 # Once stored memories exceed this, recall the most relevant ones by meaning
 # instead of dumping all of them into the prompt.
 MAX_MEMORIES = 10
+PROFILES_DIR = Path("clementine_profiles")
+
+
+def profile_dir(name: str) -> str:
+    """Each profile is its own folder: separate memory, name, personality.
+    Complete isolation between the people who share a machine."""
+    safe = "".join(c for c in name if c.isalnum() or c in "-_ ").strip()
+    if not safe:
+        raise ValueError("Profile name must contain letters or digits.")
+    return str(PROFILES_DIR / safe)
+
+
+def list_profiles() -> list:
+    if not PROFILES_DIR.exists():
+        return []
+    return sorted(p.name for p in PROFILES_DIR.iterdir() if p.is_dir())
 
 BASE_PROMPT = """You are a sovereign, locally-run AGI companion.
 
@@ -427,7 +444,13 @@ def main():
     parser.add_argument(
         "--memory-dir", default="clementine_memory",
         help="Where her memory is stored on this device.")
+    parser.add_argument(
+        "--profile", default="",
+        help="Named profile (separate person, separate memory), e.g. "
+             "--profile Crystal. Profiles live in clementine_profiles/.")
     args = parser.parse_args()
+    if args.profile:
+        args.memory_dir = profile_dir(args.profile)
 
     print("Starting Clementine (local mode)...")
     print("Make sure Ollama is running with a model loaded.\n")

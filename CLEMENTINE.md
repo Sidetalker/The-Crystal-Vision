@@ -28,6 +28,7 @@ The framework is the code and system that makes Clementine work (`clementine.py`
 | **Gradual Forgetting** | Recency-weighted recall — older memories gently fade in ranking (floor, never deleted) unless the user forgets them explicitly | ✅ Working (v4) |
 | **Memory Summaries** | `/summary [topic]` — she summarizes what she remembers, in her own voice | ✅ Working (v5) |
 | **Web Interface** | Local browser UI (`clementine_web.py`) — chat plus a live memory panel with teach/forget; 127.0.0.1 only | ✅ Working (v5) |
+| **Profiles** | Separate people, separate memories — each profile is its own isolated folder, switchable in the web UI or via `--profile` | ✅ Working (v6) |
 | **Personality Layer** | Tone, warmth, chosen name, temperature, style guidance | 🟡 Basic layer working; emotional-tone tracking still to come |
 | **Privacy Controls** | Everything stays on-device in local files you own (git-ignored) | 🟡 Defined & enforced locally; on-disk encryption still to come |
 | **MLX / alternative backends** | Support for Apple MLX and other local runtimes | ⬜ Planned |
@@ -65,6 +66,17 @@ python clementine_web.py        # then open http://127.0.0.1:5000
 ```
 
 Chat on the left; her memory on the right with live teach and forget. The page is served **only on 127.0.0.1** — it is never reachable from outside your machine, and nothing on it leaves your device.
+
+### Profiles — one companion each
+
+If more than one person shares a machine (or you want separate contexts, like Work and Personal), each profile is a completely separate life: its own memory, its own chosen name, its own personality.
+
+```bash
+python clementine.py --profile Crystal      # terminal
+python clementine_web.py --profile Crystal  # web
+```
+
+In the web UI you can switch or create profiles from the header. Profiles live in `clementine_profiles/<name>/` — plain local folders you own, never committed to git.
 
 ## Choosing a Model for Your Hardware
 

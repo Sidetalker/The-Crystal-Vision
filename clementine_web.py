@@ -10,10 +10,11 @@ can switch between them freely. Nothing leaves your device.
 """
 
 import argparse
+from pathlib import Path
 
 from flask import Flask, jsonify, render_template_string, request
 
-from clementine import Clementine
+from clementine import Clementine, list_profiles, profile_dir
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -61,8 +62,13 @@ PAGE = """<!doctype html>
 </style>
 </head>
 <body>
-<header><div><b>{{ name }}</b> · sovereign companion</div>
-<small>local only · 127.0.0.1</small></header>
+<header><div><b id="hername">{{ name }}</b> · sovereign companion</div>
+<div style="display:flex;gap:8px;align-items:center">
+  <select id="profiles" title="Profile — separate person, separate memory"></select>
+  <input id="newprofile" placeholder="new profile" size="9">
+  <button class="small" id="mkprofile" type="button">create</button>
+  <small>local only · 127.0.0.1</small>
+</div></header>
 <main>
   <div id="chatcol">
     <div id="log"></div>
@@ -129,6 +135,32 @@ document.getElementById('send').onsubmit = async (e) => {
   thinking.textContent = data.reply;
   refreshMems();
 };
+async function refreshProfiles(){
+  const r = await fetch('/api/profile'); const data = await r.json();
+  const sel = document.getElementById('profiles'); sel.innerHTML = '';
+  for (const p of data.profiles){
+    const o = document.createElement('option');
+    o.value = p; o.textContent = p; if (p === data.current) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+async function switchProfile(name){
+  const r = await fetch('/api/profile', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({profile: name})});
+  const data = await r.json();
+  if (data.ok){
+    document.getElementById('hername').textContent = data.name;
+    log.innerHTML = '';
+    bubble('her', `(profile: ${data.profile} — her memory of you here is separate)`);
+    refreshProfiles(); refreshMems();
+  }
+}
+document.getElementById('profiles').onchange = (e) => switchProfile(e.target.value);
+document.getElementById('mkprofile').onclick = () => {
+  const name = document.getElementById('newprofile').value.trim();
+  if (name){ document.getElementById('newprofile').value = ''; switchProfile(name); }
+};
 document.getElementById('teach').onsubmit = async (e) => {
   e.preventDefault();
   const text = document.getElementById('teachtext').value.trim();
@@ -141,35 +173,43 @@ document.getElementById('teach').onsubmit = async (e) => {
   document.getElementById('teachkey').value = '';
   refreshMems();
 };
-refreshMems();
+refreshProfiles(); refreshMems();
 </script>
 </body>
 </html>"""
 
 
+def _profile_of(companion: Clementine) -> str:
+    p = Path(companion.memory_dir)
+    return p.name if p.parent.name == "clementine_profiles" else "default"
+
+
 def create_app(companion: Clementine) -> Flask:
     app = Flask(__name__)
+    holder = {"c": companion}  # swapped in place when the profile changes
 
     @app.get("/")
     def home():
+        c = holder["c"]
         return render_template_string(
-            PAGE, name=companion.personality.name or "Clementine")
+            PAGE, name=c.personality.name or "Clementine")
 
     @app.post("/api/chat")
     def chat():
         message = ((request.get_json(silent=True) or {}).get("message") or "").strip()
         if not message:
             return jsonify({"error": "empty message"}), 400
-        return jsonify({"reply": companion.chat(message)})
+        return jsonify({"reply": holder["c"].chat(message)})
 
     @app.get("/api/memories")
     def memories():
+        c = holder["c"]
         facts = [{"handle": k, "text": f"{k}: {v['value']}",
                   "tags": v.get("tags") or []}
-                 for k, v in companion.memory.facts.items()]
+                 for k, v in c.memory.facts.items()]
         notes = [{"handle": f"n{i}", "text": n["text"],
                   "tags": n.get("tags") or []}
-                 for i, n in enumerate(companion.memory.notes, 1)]
+                 for i, n in enumerate(c.memory.notes, 1)]
         return jsonify({"facts": facts, "notes": notes})
 
     @app.post("/api/teach")
@@ -180,16 +220,38 @@ def create_app(companion: Clementine) -> Flask:
         if not text:
             return jsonify({"ok": False, "error": "empty"}), 400
         if key:
-            companion.remember_fact(key, text)
+            holder["c"].remember_fact(key, text)
         else:
-            companion.remember(text)
+            holder["c"].remember(text)
         return jsonify({"ok": True})
 
     @app.post("/api/forget")
     def forget():
         handle = ((request.get_json(silent=True) or {}).get("handle") or "").strip()
-        forgotten = companion.forget(handle)
+        forgotten = holder["c"].forget(handle)
         return jsonify({"ok": bool(forgotten), "forgotten": forgotten})
+
+    @app.get("/api/profile")
+    def profile_get():
+        current = _profile_of(holder["c"])
+        profiles = list_profiles()
+        if current not in profiles:
+            profiles = [current] + profiles
+        return jsonify({"current": current, "profiles": profiles})
+
+    @app.post("/api/profile")
+    def profile_switch():
+        name = ((request.get_json(silent=True) or {}).get("profile") or "").strip()
+        try:
+            target = profile_dir(name)
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid name"}), 400
+        old = holder["c"]
+        holder["c"] = Clementine(model=old.model, memory_dir=target,
+                                 embed_model=old.embed_model)
+        c = holder["c"]
+        return jsonify({"ok": True, "profile": _profile_of(c),
+                        "name": c.personality.name or "Clementine"})
 
     return app
 
@@ -201,8 +263,12 @@ def main():
                         help="Ollama model tag (same choices as the CLI).")
     parser.add_argument("--memory-dir", default="clementine_memory",
                         help="Her memory folder (shared with the CLI).")
+    parser.add_argument("--profile", default="",
+                        help="Named profile (separate person, separate memory).")
     parser.add_argument("--port", type=int, default=5000)
     args = parser.parse_args()
+    if args.profile:
+        args.memory_dir = profile_dir(args.profile)
 
     companion = Clementine(model=args.model, memory_dir=args.memory_dir)
     app = create_app(companion)
