@@ -2,6 +2,7 @@
 Clementine - Sovereign Edge AGI Companion
 v2: layered memory, personality tuning, streaming chat (local via Ollama)
 v3: semantic memory recall via local Ollama embeddings
+v4: memory management (forget/edit), gentle recency weighting, tags
 
 Everything runs on your own device. Nothing leaves it.
 """
@@ -99,8 +100,9 @@ class Clementine:
         relevant ones by meaning using local embeddings — no data leaves the
         device, and if the embedding model isn't available it simply falls
         back to showing everything."""
-        fact_items = [(f"{k}: {v['value']}", v) for k, v in self.memory.facts.items()]
-        note_items = [(n["text"], n) for n in self.memory.notes]
+        fact_items = [(self._display(f"{k}: {v['value']}", v), v)
+                      for k, v in self.memory.facts.items()]
+        note_items = [(self._display(n["text"], n), n) for n in self.memory.notes]
         total = len(fact_items) + len(note_items)
         if total == 0:
             return ""
@@ -116,7 +118,9 @@ class Clementine:
         for display, store in fact_items + note_items:
             emb = store.get("embedding")
             if q is not None and emb:
-                scored.append((self._cosine(q, emb), display))
+                stamp = store.get("when") or store.get("updated")
+                score = self._cosine(q, emb) * self._recency_factor(stamp)
+                scored.append((score, display))
         if q is None or not scored:
             return self._grouped_memory(fact_items, note_items)  # graceful fallback
 
@@ -172,17 +176,42 @@ class Clementine:
             self.save()
 
     @staticmethod
+    def _display(text: str, store: dict) -> str:
+        tags = store.get("tags") or []
+        return f"{text}  [{' '.join('#' + t for t in tags)}]" if tags else text
+
+    @staticmethod
+    def _recency_factor(stamp) -> float:
+        """Gentle fading, not deletion: newest memories score ~1.0, decaying
+        to a 0.7 floor over about a year. Strongly relevant old memories
+        still surface; ties break toward the recent."""
+        try:
+            age_days = (datetime.now() - datetime.fromisoformat(stamp)).days
+        except (TypeError, ValueError):
+            return 1.0
+        return max(0.7, 1.0 - 0.3 * min(max(age_days, 0), 365) / 365)
+
+    @staticmethod
     def _cosine(a, b) -> float:
         dot = sum(x * y for x, y in zip(a, b))
         na = math.sqrt(sum(x * x for x in a))
         nb = math.sqrt(sum(y * y for y in b))
         return dot / (na * nb) if na and nb else 0.0
 
+    @staticmethod
+    def _split_tags(text: str):
+        """Split trailing #tags off a memory, e.g. 'loves the night sky #family'."""
+        words = text.strip().split()
+        tags = [w[1:].lower() for w in words if w.startswith("#") and len(w) > 1]
+        clean = " ".join(w for w in words if not w.startswith("#"))
+        return clean.strip(), tags
+
     def remember(self, text: str):
         """Explicitly store something important, permanently."""
-        text = text.strip()
+        text, tags = self._split_tags(text)
         self.memory.notes.append({
             "text": text,
+            "tags": tags,
             "when": datetime.now().isoformat(timespec="seconds"),
             "embedding": self._embed(text),  # best-effort; None if offline
         })
@@ -190,13 +219,47 @@ class Clementine:
 
     def remember_fact(self, key: str, value: str):
         """Store a structured long-term fact; a new value updates the old one."""
-        key, value = key.strip(), value.strip()
+        key = key.strip()
+        value, tags = self._split_tags(value)
         self.memory.facts[key] = {
             "value": value,
+            "tags": tags,
             "updated": datetime.now().isoformat(timespec="seconds"),
             "embedding": self._embed(value),  # best-effort; None if offline
         }
         self.save()
+
+    def forget(self, handle: str) -> str:
+        """Forget a fact by key, or a note by its /notes number (n1, n2, ...).
+        Forgetting is the user's right; it is immediate and permanent."""
+        handle = handle.strip()
+        if handle in self.memory.facts:
+            del self.memory.facts[handle]
+            self.save()
+            return f"fact '{handle}'"
+        if handle.lower().startswith("n") and handle[1:].isdigit():
+            idx = int(handle[1:]) - 1
+            if 0 <= idx < len(self.memory.notes):
+                removed = self.memory.notes.pop(idx)
+                self.save()
+                return f"note '{removed['text']}'"
+        return ""
+
+    def edit_note(self, handle: str, new_text: str) -> bool:
+        """Rewrite a note by its /notes number; refreshes embedding and time."""
+        if handle.lower().startswith("n") and handle[1:].isdigit():
+            idx = int(handle[1:]) - 1
+            if 0 <= idx < len(self.memory.notes):
+                text, tags = self._split_tags(new_text)
+                self.memory.notes[idx] = {
+                    "text": text,
+                    "tags": tags,
+                    "when": datetime.now().isoformat(timespec="seconds"),
+                    "embedding": self._embed(text),
+                }
+                self.save()
+                return True
+        return False
 
     def set_name(self, name: str):
         self.personality.name = name.strip()
@@ -308,9 +371,12 @@ class Clementine:
 HELP = """Commands:
   /name <name>      give her a name (or change it)
   /iam <name>       tell her your name
-  /remember <text>  ask her to permanently remember something
+  /remember <text>  ask her to permanently remember something (add #tags if you like)
   /fact <key> <value>  teach her a structured fact, e.g. /fact birthday June 3
-  /notes            show everything she's been asked to remember
+                    (teach the same key again to correct it)
+  /notes            show everything she remembers (facts by key, notes numbered)
+  /forget <handle>  forget a fact by key or a note by number, e.g. /forget n2
+  /editnote <n> <text>  rewrite a note, e.g. /editnote n1 she prefers dawn walks
   /style <text>     tune her voice, e.g. /style more poetic, fewer questions
   /temp <0.0-1.5>   set temperature (playfulness)
   /model <tag>      switch the local model, e.g. /model llama3.2:3b
@@ -374,10 +440,26 @@ def main():
                 print("[Usage: /fact <key> <value>, e.g. /fact birthday June 3]\n")
         elif user_input.lower() == "/notes":
             for key, fact in companion.memory.facts.items():
-                print(f"  - {key}: {fact['value']}  ({fact['updated']})")
-            for note in companion.memory.notes:
-                print(f"  - {note['text']}  ({note['when']})")
+                tags = " ".join("#" + t for t in fact.get("tags") or [])
+                print(f"  - {key}: {fact['value']}"
+                      f"{'  [' + tags + ']' if tags else ''}  ({fact['updated']})")
+            for i, note in enumerate(companion.memory.notes, 1):
+                tags = " ".join("#" + t for t in note.get("tags") or [])
+                print(f"  n{i} - {note['text']}"
+                      f"{'  [' + tags + ']' if tags else ''}  ({note['when']})")
             print()
+        elif user_input.lower().startswith("/forget "):
+            forgotten = companion.forget(user_input[8:])
+            if forgotten:
+                print(f"[Forgotten: {forgotten}]\n")
+            else:
+                print("[Nothing matched. Use a fact key or a note number from /notes.]\n")
+        elif user_input.lower().startswith("/editnote "):
+            parts = user_input[10:].split(" ", 1)
+            if len(parts) == 2 and companion.edit_note(parts[0], parts[1]):
+                print("[Note rewritten.]\n")
+            else:
+                print("[Usage: /editnote n<N> <new text> — numbers are in /notes]\n")
         elif user_input.lower().startswith("/style "):
             companion.personality.style_notes = user_input[7:].strip()
             companion.save()
