@@ -49,6 +49,7 @@ class Memory:
     conversation: list = field(default_factory=list)  # recent verbatim turns
     summaries: list = field(default_factory=list)     # condensed older history
     notes: list = field(default_factory=list)         # things told to remember
+    facts: dict = field(default_factory=dict)         # structured key -> value facts
 
 
 class Clementine:
@@ -73,6 +74,10 @@ class Clementine:
             parts.append(f"Your human's name is {self.personality.human_name}.")
         if self.personality.style_notes:
             parts.append(f"Style guidance from your human: {self.personality.style_notes}")
+        if self.memory.facts:
+            facts = "\n".join(f"- {k}: {v['value']}"
+                              for k, v in self.memory.facts.items())
+            parts.append(f"Important facts about your human:\n{facts}")
         if self.memory.notes:
             notes = "\n".join(f"- {n['text']}" for n in self.memory.notes)
             parts.append(f"Things your human asked you to remember:\n{notes}")
@@ -87,6 +92,14 @@ class Clementine:
             "text": text.strip(),
             "when": datetime.now().isoformat(timespec="seconds"),
         })
+        self.save()
+
+    def remember_fact(self, key: str, value: str):
+        """Store a structured long-term fact; a new value updates the old one."""
+        self.memory.facts[key.strip()] = {
+            "value": value.strip(),
+            "updated": datetime.now().isoformat(timespec="seconds"),
+        }
         self.save()
 
     def set_name(self, name: str):
@@ -200,6 +213,7 @@ HELP = """Commands:
   /name <name>      give her a name (or change it)
   /iam <name>       tell her your name
   /remember <text>  ask her to permanently remember something
+  /fact <key> <value>  teach her a structured fact, e.g. /fact birthday June 3
   /notes            show everything she's been asked to remember
   /style <text>     tune her voice, e.g. /style more poetic, fewer questions
   /temp <0.0-1.5>   set temperature (playfulness)
@@ -241,7 +255,16 @@ def main():
         elif user_input.lower().startswith("/remember "):
             companion.remember(user_input[10:])
             print("[Remembered, permanently.]\n")
+        elif user_input.lower().startswith("/fact "):
+            parts = user_input[6:].split(" ", 1)
+            if len(parts) == 2:
+                companion.remember_fact(parts[0], parts[1])
+                print(f"[Fact remembered: {parts[0]} = {parts[1]}]\n")
+            else:
+                print("[Usage: /fact <key> <value>, e.g. /fact birthday June 3]\n")
         elif user_input.lower() == "/notes":
+            for key, fact in companion.memory.facts.items():
+                print(f"  - {key}: {fact['value']}  ({fact['updated']})")
             for note in companion.memory.notes:
                 print(f"  - {note['text']}  ({note['when']})")
             print()
