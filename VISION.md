@@ -6,7 +6,7 @@
 
 TerAustralis Incognita is a creative mythology and speculative futures project born in Australia.
 
-At its heart is **The Codex of Terra Australis Incognita** — a five-chapter mythic work that weaves together Aristotle's ancient dream of a Great Southern Land, the deep Songlines of the First Peoples, and the emerging reality of space exploration and sovereign artificial intelligence.
+At its heart is **The Codex of TerAustralis Incognita** — a five-chapter mythic work that weaves together Aristotle's ancient dream of a Great Southern Land, the deep Songlines of the First Peoples, and the emerging reality of space exploration and sovereign artificial intelligence.
 
 Alongside it sits **The Apocryphon of Crystal**, a personal and philosophical companion text.
 
@@ -22,7 +22,7 @@ This project believes a future needs a compelling story as much as it needs tech
 
 ## What exists today
 
-- The Codex of Terra Australis Incognita (Chapters I–V)
+- The Codex of TerAustralis Incognita (Chapters I–V)
 - The Apocryphon of Crystal
 - The Voices Framework working method
 - Project identity and branding

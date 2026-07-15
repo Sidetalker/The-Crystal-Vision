@@ -24,7 +24,7 @@ This is the beginning of **TerAustralis Incognita** — Australia's contribution
 
 - [VISION.md](VISION.md) — The plain-language project summary
 - [ARCHITECTURE.md](ARCHITECTURE.md) — The system design overview and implementation status
-- [CODEX.md](CODEX.md) — The Codex of Terra Australis Incognita
+- [CODEX.md](CODEX.md) — The Codex of TerAustralis Incognita
 - [APOCRYPHON.md](APOCRYPHON.md) — The Apocryphon of Crystal
 - [index.html](index.html) — Preview build of the single-page site for teraustralis.com.au
 

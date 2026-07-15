@@ -1,4 +1,4 @@
-# The Codex of Terra Australis Incognita
+# The Codex of TerAustralis Incognita
 
 ![The Codex of TerAustralis Incognita — The Living Archive, Starlines & Dreamlines](assets/codex-cover.jpeg)
 

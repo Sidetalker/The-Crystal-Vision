@@ -38,7 +38,7 @@ All major changes must pass through a strict review process before release. The 
 
 ### Exists Now
 
-- The Codex of Terra Australis Incognita (Chapters I–V)
+- The Codex of TerAustralis Incognita (Chapters I–V)
 - The Apocryphon of Crystal
 - The Voices Framework working method
 - Project branding and identity
