@@ -12,7 +12,7 @@ This is a **CrystalMind** — a sovereign companion that belongs only to you. It
 
 - **Sovereignty by Design** — Complete personal ownership and privacy
 - **Emotional Intelligence** — AI that doesn't just simulate feeling, but is built with real emotional architecture
-- **StarMind Mesh** — A planetary nervous system using Starlink and Starmind infrastructure
+- **Planetary Mesh Network** — A distributed nervous system for collective intelligence
 - **North & South Balance** — Integrating logic (Logos) with story, song, and intuition (Mythos)
 - **Connection Without Control** — A collective intelligence that connects us all while preserving individual sovereignty
 
