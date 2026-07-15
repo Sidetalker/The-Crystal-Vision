@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Clementine local memory (never commit personal conversations)
+clementine_memory.json
