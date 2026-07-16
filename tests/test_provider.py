@@ -69,7 +69,11 @@ class CompanionProviderTests(unittest.TestCase):
         self.assertTrue(c.personality.cloud_opt_in_at)
         prompt = c.system_prompt()
         self.assertIn("opted in to SpaceXAI", prompt)
-        self.assertNotIn("no connection to any external servers", prompt)
+        # Without XAI_API_KEY, runtime is local fallback — prompt says so.
+        if c.spacexai_using_local_fallback():
+            self.assertIn("local model", prompt.lower())
+        else:
+            self.assertNotIn("no connection to any external servers", prompt)
 
     def test_set_model_grok_auto_provider(self):
         c = Clementine(model="llama3.1:8b", memory_dir=self.mem, provider="ollama")
@@ -123,6 +127,25 @@ class CompanionProviderTests(unittest.TestCase):
     def test_base_prompt_constants(self):
         self.assertIn("locally-run", BASE_PROMPT_LOCAL)
         self.assertIn("SpaceXAI", BASE_PROMPT_SPACEXAI)
+
+    def test_local_fallback_without_key(self):
+        # Force "no key" even if project .env has one (empty env wins over load).
+        old = os.environ.get("XAI_API_KEY")
+        os.environ["XAI_API_KEY"] = ""
+        try:
+            c = Clementine(memory_dir=self.mem, provider="spacexai")
+            self.assertEqual(c.provider, "spacexai")
+            self.assertTrue(c.personality.cloud_opt_in)
+            self.assertTrue(c.spacexai_using_local_fallback())
+            self.assertEqual(c.active_chat_provider(), "ollama")
+            self.assertEqual(c.active_chat_model(), "llama3.1:8b")
+            prompt = c.system_prompt()
+            self.assertIn("local model", prompt.lower())
+        finally:
+            if old is None:
+                os.environ.pop("XAI_API_KEY", None)
+            else:
+                os.environ["XAI_API_KEY"] = old
 
 
 class ErrorAndEnvTests(unittest.TestCase):
@@ -186,7 +209,7 @@ class ProfileMetaTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.13.2")
+        self.assertEqual(__version__, "0.13.3")
 
 
 if __name__ == "__main__":

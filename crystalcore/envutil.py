@@ -30,5 +30,13 @@ def load_dotenv(path: str | Path = ".env") -> bool:
 
 
 def xai_api_key_present() -> bool:
-    """True if XAI_API_KEY is set and non-empty (after optional .env load)."""
+    """True if XAI_API_KEY is set and non-empty.
+
+    Loads a project-root .env once if the key is missing from the process env,
+    so late checks after cwd is the project folder still work.
+    """
+    if os.environ.get("XAI_API_KEY", "").strip():
+        return True
+    # Best-effort: project .env next to CWD (clementine launch dir).
+    load_dotenv(".env")
     return bool(os.environ.get("XAI_API_KEY", "").strip())

@@ -323,7 +323,13 @@ function paintBackend(data){
   const opted = data.cloud_opt_in;
   const foot = document.getElementById('foot');
   const hint = document.getElementById('bindhint');
-  if (prov === 'spacexai'){
+  const fallback = data.local_fallback;
+  const activeProv = data.active_provider || prov;
+  const activeModel = data.active_model || model;
+  if (prov === 'spacexai' && fallback){
+    hint.textContent = 'local fallback · ' + activeModel + ' (no API key)';
+    foot.textContent = 'Opted into SpaceXAI but XAI_API_KEY is missing — chatting via local Ollama (' + activeModel + '). Add a key to .env for api.x.ai. Memory stays local. Non solus.';
+  } else if (prov === 'spacexai'){
     hint.textContent = 'SpaceXAI · opted in · ' + model + (keyOk ? '' : ' · no key');
     foot.textContent = 'You opted in: chat goes to api.x.ai (' + model + '). Memory files stay on this device. UI is 127.0.0.1 only. Non solus.';
   } else {
@@ -559,6 +565,9 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
             "profiles": profiles,
             "provider": c.provider,
             "model": c.model,
+            "active_provider": c.active_chat_provider(),
+            "active_model": c.active_chat_model(),
+            "local_fallback": c.spacexai_using_local_fallback(),
             "cloud_opt_in": bool(c.personality.cloud_opt_in),
             "cloud_opt_in_at": c.personality.cloud_opt_in_at or "",
             "xai_key_present": xai_api_key_present(),
@@ -686,11 +695,13 @@ def main():
     app = create_app(companion, port=args.port)
     name = companion.personality.name or "Clementine"
     print(f"{name} is at home: open http://127.0.0.1:{args.port}")
-    if companion.provider == "spacexai":
+    if companion.spacexai_using_local_fallback():
+        print(f"SpaceXAI opted in but no XAI_API_KEY — local FALLBACK "
+              f"({companion.active_chat_model()}).")
+        print("Add key to .env (https://console.x.ai). UI: 127.0.0.1 only.")
+    elif companion.provider == "spacexai":
         print(f"SpaceXAI chat ({companion.model}) — memory stays local. "
               "UI still binds 127.0.0.1 only.")
-        if not xai_api_key_present():
-            print("WARNING: XAI_API_KEY not set — add it to .env before chatting.")
     else:
         print("Local only — chat via Ollama. Ctrl+C to say goodnight.")
     # Never bind beyond localhost, never enable the debugger: the UI is

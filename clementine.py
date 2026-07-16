@@ -172,15 +172,17 @@ def main():
     )
 
     if companion.provider == "spacexai":
-        print("Starting Clementine (SpaceXAI — opted in; chat via api.x.ai)...")
-        print("Memory stays local. /optout to revoke.")
-        if companion.personality.cloud_opt_in_at:
-            print(f"Opt-in since {companion.personality.cloud_opt_in_at}.")
-        if xai_api_key_present():
-            print("XAI_API_KEY found.\n")
+        if companion.spacexai_using_local_fallback():
+            print("Starting Clementine (SpaceXAI opted in — local FALLBACK)...")
+            print(f"No XAI_API_KEY: chat uses Ollama ({companion.active_chat_model()}).")
+            print("Add key to .env from https://console.x.ai to use api.x.ai.")
+            print("Memory stays local. /optout to revoke opt-in.\n")
         else:
-            print("WARNING: XAI_API_KEY not set — chat will fail until you add it "
-                  "(https://console.x.ai → .env).\n")
+            print("Starting Clementine (SpaceXAI — opted in; chat via api.x.ai)...")
+            print("Memory stays local. /optout to revoke.")
+            if companion.personality.cloud_opt_in_at:
+                print(f"Opt-in since {companion.personality.cloud_opt_in_at}.")
+            print("XAI_API_KEY found.\n")
     else:
         print("Starting Clementine (local mode)...")
         print("Make sure Ollama is running with a model loaded.")
@@ -192,7 +194,10 @@ def main():
     greeting = f"{name} is {'back with you' if returning else 'ready'}"
     if gap:
         greeting += f" — you last spoke {gap}"
-    print(f"{greeting}  [{companion.provider} · {companion.model}]")
+    active = f"{companion.active_chat_provider()} · {companion.active_chat_model()}"
+    pref = f"pref {companion.provider} · {companion.model}"
+    print(f"{greeting}  [{active}"
+          + (f" | {pref}]" if companion.spacexai_using_local_fallback() else "]"))
     print("Type /help for commands, /exit to quit.\n")
 
     def dispatch(user_input: str) -> str | None:
