@@ -61,7 +61,7 @@ def package_surface() -> dict[str, Any]:
         "package": "crystalcore",
         "modules": [
             "companion", "memory", "profiles", "ollama", "spacexai",
-            "envutil", "node", "expose",
+            "envutil", "node", "expose", "status",
         ],
         "exports": sorted(getattr(pkg, "__all__", [])),
         "constants": {
@@ -211,6 +211,8 @@ def full_expose(
             "terminal": "python clementine.py",
             "web": "python clementine_web.py  # http://127.0.0.1:5000",
             "expose_cli": "python -m crystalcore.expose",
+            "status_cli": "python -m crystalcore.status",
+            "package_cli": "python -m crystalcore  # status by default",
             "start_bat": ["Start-Lumina.bat", "Start-Lumina-Web.bat"],
         },
     }

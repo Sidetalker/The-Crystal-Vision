@@ -40,6 +40,8 @@ This is the beginning of **TerAustralis Incognita** — Australia's contribution
 - [VISION.md](VISION.md) — The plain-language project summary
 - [ARCHITECTURE.md](ARCHITECTURE.md) — The system design overview and implementation status
 - [CLEMENTINE.md](CLEMENTINE.md) — The sovereign AI companion: overview, build status, and how to run her
+- [BRIDGE.md](BRIDGE.md) — Australian root and optional dedication toward Africa (honest project note)
+- [crystalcore.html](crystalcore.html) — Public page for the CrystalCore framework
 - [CRYSTALMATRIX.md](CRYSTALMATRIX.md) — Design for how sovereign companions could connect (concept)
 - [STRATEGY.md](STRATEGY.md) — The accelerated roadmap toward external readiness
 - [MILESTONES.md](MILESTONES.md) — The 6-month build plan with weekly milestones
