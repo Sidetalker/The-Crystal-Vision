@@ -25,7 +25,7 @@ from .ollama import (
 
 # Once stored memories exceed this, recall the most relevant ones by meaning
 # instead of dumping all of them into the prompt.
-MAX_MEMORIES = 10
+MAX_MEMORIES = 10  # exported; used by expose + recall
 
 BASE_PROMPT = """You are a sovereign, locally-run AI companion.
 

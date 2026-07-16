@@ -14,9 +14,10 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template_string, request
 
-from crystalcore import (Clementine, delete_profile, list_profiles,
+from crystalcore import (Clementine, delete_profile, full_expose, list_profiles,
                          profile_dir, profile_meta)
 from crystalcore import profiles as _profiles
+from crystalcore.expose import companion_dump
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -385,6 +386,36 @@ def create_app(companion: Clementine) -> Flask:
         c = holder["c"]
         return jsonify({"ok": True, "profile": _profile_of(c),
                         "name": c.personality.name or "Clementine"})
+
+    # ----- full transparency (localhost only; never leave the device) -----
+
+    @app.get("/api/expose")
+    @app.get("/api/system")
+    def expose_all():
+        """Everything: package, memory, conversation, node, routes, prompts."""
+        return jsonify(full_expose(companion=holder["c"]))
+
+    @app.get("/api/conversation")
+    def conversation():
+        c = holder["c"]
+        return jsonify({
+            "conversation": c.memory.conversation,
+            "summaries": c.memory.summaries,
+            "last_seen": c.memory.last_seen,
+            "count": len(c.memory.conversation),
+        })
+
+    @app.get("/api/prompt")
+    def prompt():
+        c = holder["c"]
+        q = (request.args.get("q") or "").strip()
+        return jsonify({
+            "base_prompt": __import__(
+                "crystalcore.companion", fromlist=["BASE_PROMPT"]
+            ).BASE_PROMPT,
+            "system_prompt_live": c.system_prompt(q),
+            "personality": companion_dump(c, include_prompt=False)["personality"],
+        })
 
     return app
 
