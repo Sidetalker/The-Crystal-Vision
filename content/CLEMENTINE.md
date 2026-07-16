@@ -16,15 +16,17 @@ She is designed to be a truly personal, locally-run AI that belongs only to one 
 
 ## The Framework — Components & Status
 
-The framework is called **CrystalCore** — the engine of memory, profiles, and presence (the `crystalcore/` package). **Clementine** is the first persona who lives on it. Entry points: `clementine.py` (terminal) and `clementine_web.py` (browser).
+The framework is called **CrystalCore** — the engine of memory, profiles, and presence (the `crystalcore/` package). **Clementine** is the first persona who lives on it. Everything lives in the `clementine/` folder. Entry points: `clementine.py` (terminal) and `server.py` + `webapp/` (browser).
 
 ```
-crystalcore/            the framework
-├── companion.py        the brain: memory layers, recall, chat
-├── memory.py           the data model (Personality, Memory)
-└── profiles.py         self-contained profiles
-clementine.py           terminal interface
-clementine_web.py       local web interface
+clementine/             her home, standalone
+├── crystalcore/        the framework
+│   ├── companion.py    the brain: memory layers, recall, chat
+│   ├── memory.py       the data model (Personality, Memory)
+│   └── profiles.py     self-contained profiles
+├── clementine.py       terminal interface
+├── server.py           local JSON API (127.0.0.1 only)
+└── webapp/             local Svelte web interface
 ```
 
 | Component | Purpose | Status |
