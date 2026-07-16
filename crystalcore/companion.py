@@ -9,6 +9,7 @@ the user's own device. Nothing leaves it.
 
 import json
 import math
+import os
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -16,10 +17,12 @@ from pathlib import Path
 import requests
 
 from .memory import Memory, Personality
+from .ollama import (
+    DEFAULT_EMBED_MODEL,
+    OllamaClient,
+    user_facing_ollama_error,
+)
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
-EMBED_URL = "http://localhost:11434/api/embeddings"
-DEFAULT_EMBED_MODEL = "nomic-embed-text"  # optional: `ollama pull nomic-embed-text`
 # Once stored memories exceed this, recall the most relevant ones by meaning
 # instead of dumping all of them into the prompt.
 MAX_MEMORIES = 10
@@ -58,16 +61,16 @@ class Clementine:
                  memory_dir: str = "clementine_memory",
                  max_recent_turns: int = 30,
                  embed_model: str = DEFAULT_EMBED_MODEL):
-        self.model = model
         self.memory_dir = Path(memory_dir)
         self.max_recent_turns = max_recent_turns
-        self.embed_model = embed_model
-        self._embed_ok = None  # None=untested, True/False once known this session
         self.personality = Personality()
         self.memory = Memory()
         self.load()
         if self.personality.model:  # a profile may prefer its own model
-            self.model = self.personality.model
+            model = self.personality.model
+        self.model = model
+        self.embed_model = embed_model
+        self._ollama = OllamaClient(model=model, embed_model=embed_model)
 
     # ---------- identity & memory ----------
 
@@ -163,22 +166,7 @@ class Clementine:
 
     def _embed(self, text: str):
         """Return an embedding vector via local Ollama, or None if unavailable."""
-        if self._embed_ok is False:
-            return None
-        try:
-            r = requests.post(EMBED_URL,
-                              json={"model": self.embed_model, "prompt": text},
-                              timeout=60)
-            r.raise_for_status()
-            emb = r.json().get("embedding")
-        except requests.exceptions.RequestException:
-            self._embed_ok = False
-            return None
-        if not emb:
-            self._embed_ok = False
-            return None
-        self._embed_ok = True
-        return emb
+        return self._ollama.embed(text)
 
     def _ensure_embeddings(self):
         """Backfill embeddings for any facts/notes that lack them, so older
@@ -194,6 +182,13 @@ class Clementine:
                 changed = True
         if changed:
             self.save()
+
+    def _temp(self) -> float:
+        return self.personality.temperature
+
+    def _complete(self, messages: list) -> str:
+        """Non-streaming completion via the shared Ollama client."""
+        return self._ollama.chat(messages, temperature=self._temp())
 
     @staticmethod
     def _display(text: str, store: dict) -> str:
@@ -294,7 +289,7 @@ class Clementine:
 
         existing = "\n".join(f"- {r['text']}" for r in self.memory.reflections)
         try:
-            raw = self._ollama_chat([
+            raw = self._complete([
                 {"role": "system",
                  "content": "You are a warm companion privately reflecting on "
                             "your human. From the material, write 1 to 3 gentle, "
@@ -353,6 +348,7 @@ class Clementine:
         """Switch the local model and remember the choice for this profile."""
         self.model = tag.strip()
         self.personality.model = self.model
+        self._ollama.model = self.model
         self.save()
 
     def time_since_last(self) -> str:
@@ -392,7 +388,7 @@ class Clementine:
         if not listing:
             return "I don't have any memories to summarize yet."
         try:
-            return self._ollama_chat([
+            return self._complete([
                 {"role": "system",
                  "content": "You are a warm, sincere companion. Summarize what "
                             "you remember about your human from these memory "
@@ -408,30 +404,19 @@ class Clementine:
 
     def chat(self, user_message: str, stream_to=None) -> str:
         """Send a message, get a reply. If stream_to is a writable stream
-        (e.g. sys.stdout), the reply is printed as it arrives."""
-        self.memory.conversation.append({"role": "user", "content": user_message})
+        (e.g. sys.stdout), the reply is printed as it arrives.
 
-        messages = ([{"role": "system", "content": self.system_prompt(user_message)}]
-                    + self.memory.conversation)
-        try:
-            reply = self._ollama_chat(messages, stream_to=stream_to)
-        except requests.exceptions.ConnectionError:
-            self.memory.conversation.pop()  # keep history consistent for re-send
-            return ("[I can't reach my local model — is Ollama running? "
-                    f"Try: ollama serve, then ollama pull {self.model}]")
-        except requests.exceptions.Timeout:
-            self.memory.conversation.pop()
-            return ("[That took too long — the model may still be loading. "
-                    "Give it a moment and try again.]")
-        except requests.exceptions.RequestException as e:
-            self.memory.conversation.pop()
-            return f"[Error talking to the local model: {e}]"
-
-        self.memory.conversation.append({"role": "assistant", "content": reply})
-        self._touch()
-        self._condense_if_needed()
-        self.save()
-        return reply
+        Built on chat_stream so error handling and memory finalization live once.
+        """
+        pieces = []
+        for piece in self.chat_stream(user_message):
+            pieces.append(piece)
+            if stream_to is not None:
+                stream_to.write(piece)
+                stream_to.flush()
+        if stream_to is not None:
+            stream_to.write("\n")
+        return "".join(pieces)
 
     def chat_stream(self, user_message: str):
         """Generator variant of chat(): yields reply tokens as they arrive.
@@ -442,27 +427,17 @@ class Clementine:
                     + self.memory.conversation)
 
         pieces = []
-        finalized = False
+        failed = False
         try:
-            for piece in self._ollama_stream(messages):
+            for piece in self._ollama.stream_chat(messages, temperature=self._temp()):
                 pieces.append(piece)
                 yield piece
-        except requests.exceptions.ConnectionError:
-            self.memory.conversation.pop()
-            finalized = True
-            yield ("[I can't reach my local model — is Ollama running? "
-                   f"Try: ollama serve, then ollama pull {self.model}]")
-        except requests.exceptions.Timeout:
-            self.memory.conversation.pop()
-            finalized = True
-            yield ("[That took too long — the model may still be loading. "
-                   "Give it a moment and try again.]")
         except requests.exceptions.RequestException as e:
             self.memory.conversation.pop()
-            finalized = True
-            yield f"[Error talking to the local model: {e}]"
+            failed = True
+            yield user_facing_ollama_error(e, self.model)
         finally:
-            if not finalized:
+            if not failed:
                 reply = "".join(pieces)
                 if reply:
                     self.memory.conversation.append(
@@ -473,58 +448,15 @@ class Clementine:
                     self.memory.conversation.pop()
                 self.save()
 
-    def _ollama_stream(self, messages):
-        """Yield reply pieces from the local model as they are generated."""
-        response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": self.model,
-                "messages": messages,
-                "stream": True,
-                "options": {"temperature": self.personality.temperature},
-            },
-            timeout=300,
-            stream=True,
-        )
-        response.raise_for_status()
-        for line in response.iter_lines():
-            if not line:
-                continue
-            chunk = json.loads(line)
-            piece = chunk.get("message", {}).get("content", "")
-            if piece:
-                yield piece
-            if chunk.get("done"):
-                break
-
-    def _ollama_chat(self, messages, stream_to=None) -> str:
-        if stream_to is not None:
-            pieces = []
-            for piece in self._ollama_stream(messages):
-                pieces.append(piece)
-                stream_to.write(piece)
-                stream_to.flush()
-            stream_to.write("\n")
-            return "".join(pieces)
-
-        response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": self.model,
-                "messages": messages,
-                "stream": False,
-                "options": {"temperature": self.personality.temperature},
-            },
-            timeout=300,
-        )
-        response.raise_for_status()
-        return response.json()["message"]["content"]
-
     # ---------- long-term memory ----------
 
     def _condense_if_needed(self):
         """When the verbatim history gets long, fold the oldest half into a
-        summary so the context window never overflows but nothing is lost."""
+        summary so the context window never overflows but nothing is lost.
+
+        Does not auto-reflect: reflection is only via /reflect or the web
+        button, so chat latency and invented insights stay under user control.
+        """
         limit = self.max_recent_turns * 2  # turns = user+assistant messages
         if len(self.memory.conversation) <= limit:
             return
@@ -532,7 +464,7 @@ class Clementine:
         old = self.memory.conversation[: limit // 2]
         transcript = "\n".join(f"{m['role']}: {m['content']}" for m in old)
         try:
-            summary = self._ollama_chat([
+            summary = self._complete([
                 {"role": "system",
                  "content": "Summarize this conversation excerpt in a short "
                             "paragraph, keeping every personal fact, feeling, "
@@ -551,21 +483,26 @@ class Clementine:
             "when": datetime.now().isoformat(timespec="seconds"),
         })
         self.memory.conversation = self.memory.conversation[limit // 2:]
-        # A significant stretch of conversation just closed — a natural
-        # moment for her to reflect. Best-effort; never blocks the chat.
-        try:
-            self.reflect()
-        except Exception:
-            pass
 
     # ---------- persistence (all local, plain files you own) ----------
 
     def save(self):
+        """Write config + memory via temp files then replace (more atomic)."""
         self.memory_dir.mkdir(parents=True, exist_ok=True)
-        (self.memory_dir / "config.json").write_text(
-            json.dumps(asdict(self.personality), indent=2))
-        (self.memory_dir / "memory.json").write_text(
-            json.dumps(asdict(self.memory), indent=2))
+        self._atomic_write(
+            self.memory_dir / "config.json",
+            json.dumps(asdict(self.personality), indent=2),
+        )
+        self._atomic_write(
+            self.memory_dir / "memory.json",
+            json.dumps(asdict(self.memory), indent=2),
+        )
+
+    @staticmethod
+    def _atomic_write(path: Path, text: str) -> None:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
 
     def load(self):
         self.personality = self._load_json(

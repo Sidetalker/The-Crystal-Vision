@@ -11,16 +11,21 @@ shipped here). Your human may rename her; the framework doesn't mind.
 
 from .companion import BASE_PROMPT, Clementine
 from .memory import Memory, Personality
+from .node import EthicsCore, IncognitaNode, SovereignEthicsHash, local_node
+from .ollama import DEFAULT_EMBED_MODEL, OllamaClient
 from .profiles import (PROFILES_DIR, delete_profile, list_profiles,
                        profile_dir, profile_meta)
 
 # The framework name for the companion class, for those who prefer it.
 Companion = Clementine
 
-__version__ = "0.7.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "Clementine", "Companion", "Personality", "Memory", "BASE_PROMPT",
     "PROFILES_DIR", "profile_dir", "list_profiles", "profile_meta",
-    "delete_profile", "__version__",
+    "delete_profile",
+    "IncognitaNode", "EthicsCore", "SovereignEthicsHash", "local_node",
+    "OllamaClient", "DEFAULT_EMBED_MODEL",
+    "__version__",
 ]
