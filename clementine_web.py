@@ -83,6 +83,7 @@ PAGE = """<!doctype html>
     <form id="send">
       <textarea id="box" rows="1" autocomplete="off" autofocus
         placeholder="Say something… (Enter to send, Shift+Enter for a new line)"></textarea>
+      <button type="button" id="mic" class="small" title="Hold a conversation: click and speak">🎤 talk</button>
       <button>Send</button>
       <button type="button" id="stop" class="small" style="display:none">Stop</button>
     </form>
@@ -171,6 +172,44 @@ if (synth){
 } else {
   voiceBtn.style.display = 'none';
   voicePick.style.display = 'none';
+}
+
+// ---- her ears: speak to her instead of typing ----
+const micBtn = document.getElementById('mic');
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null, listening = false;
+function paintMic(){
+  micBtn.textContent = listening ? '🔴 listening…' : '🎤 talk';
+  micBtn.style.color = listening ? '#F87171' : '';
+}
+if (SR){
+  recog = new SR();
+  recog.lang = 'en-US';
+  recog.interimResults = true;         // show words as you speak
+  recog.continuous = false;            // one turn, then send
+  let finalText = '';
+  recog.onstart = () => { listening = true; finalText = ''; paintMic(); };
+  recog.onerror = () => { listening = false; paintMic(); };
+  recog.onend = () => {
+    listening = false; paintMic();
+    const said = (finalText || boxEl.value).trim();
+    if (said){ boxEl.value = said; document.getElementById('send').requestSubmit(); }
+  };
+  recog.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++){
+      const chunk = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += chunk; else interim += chunk;
+    }
+    boxEl.value = (finalText + interim).trim();   // live preview in the box
+  };
+  micBtn.onclick = () => {
+    if (listening){ recog.stop(); return; }
+    stopSpeaking();                    // don't let her voice feed back into the mic
+    try { recog.start(); } catch (_) {}
+  };
+} else {
+  micBtn.style.display = 'none';
 }
 async function refreshMems(){
   const r = await fetch('/api/memories'); const data = await r.json();
