@@ -18,12 +18,12 @@ from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from . import __version__
 from .companion import BASE_PROMPT, Clementine, MAX_MEMORIES
 from .memory import Memory, Personality
 from .node import IncognitaNode, local_node
 from .ollama import CHAT_URL, DEFAULT_EMBED_MODEL, EMBED_URL
 from .profiles import PROFILES_DIR, list_profiles, profile_meta
+from .version import __version__
 
 
 def _strip_embeddings(obj: Any) -> Any:

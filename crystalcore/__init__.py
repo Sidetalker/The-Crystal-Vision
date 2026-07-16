@@ -9,6 +9,7 @@ Clementine is the first persona who lives on it (and the default one
 shipped here). Your human may rename her; the framework doesn't mind.
 """
 
+from .version import __version__
 from .companion import BASE_PROMPT, MAX_MEMORIES, Clementine
 from .expose import (
     companion_dump,
@@ -43,7 +44,6 @@ from .profiles import (PROFILES_DIR, delete_profile, list_profiles,
 # The framework name for the companion class, for those who prefer it.
 Companion = Clementine
 
-__version__ = "0.10.0"
 
 __all__ = [
     # Companion / memory
