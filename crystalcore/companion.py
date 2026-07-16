@@ -252,6 +252,67 @@ class Clementine:
         }
         self.save()
 
+    def list_memories(self, tag: str = "") -> dict:
+        """Canonical memory listing for CLI and web (one contract)."""
+        want = (tag or "").strip().lstrip("#").lower()
+
+        def shown(store):
+            return not want or want in (store.get("tags") or [])
+
+        facts = []
+        for key, fact in self.memory.facts.items():
+            if not shown(fact):
+                continue
+            facts.append({
+                "handle": key,
+                "text": f"{key}: {fact['value']}",
+                "tags": fact.get("tags") or [],
+                "when": fact.get("updated", ""),
+            })
+        notes = []
+        for i, note in enumerate(self.memory.notes, 1):
+            if not shown(note):
+                continue
+            notes.append({
+                "handle": f"n{i}",
+                "text": note["text"],
+                "tags": note.get("tags") or [],
+                "when": note.get("when", ""),
+            })
+        reflections = []
+        if not want:
+            for i, r in enumerate(self.memory.reflections, 1):
+                reflections.append({
+                    "handle": f"r{i}",
+                    "text": r["text"],
+                    "tags": [],
+                    "when": r.get("when", ""),
+                })
+        return {"facts": facts, "notes": notes, "reflections": reflections}
+
+    def format_memories(self, tag: str = "") -> str:
+        """Plain-text /notes rendering shared by the terminal."""
+        data = self.list_memories(tag)
+        lines = []
+        for f in data["facts"]:
+            tags = " ".join("#" + t for t in f["tags"])
+            extra = f"  [{tags}]" if tags else ""
+            when = f"  ({f['when']})" if f["when"] else ""
+            lines.append(f"  - {f['text']}{extra}{when}")
+        for n in data["notes"]:
+            tags = " ".join("#" + t for t in n["tags"])
+            extra = f"  [{tags}]" if tags else ""
+            when = f"  ({n['when']})" if n["when"] else ""
+            lines.append(f"  {n['handle']} - {n['text']}{extra}{when}")
+        if data["reflections"]:
+            lines.append(
+                "  her own reflections (hold lightly; /forget rN removes one):"
+            )
+            for r in data["reflections"]:
+                when = f"  ({r['when']})" if r["when"] else ""
+                lines.append(f"  {r['handle']} - {r['text']}{when}")
+        return "\n".join(lines) + ("\n" if lines else "")
+
     def forget(self, handle: str) -> str:
         """Forget a fact by key, a note by number (n1, n2, ...), or one of
         her own reflections (r1, r2, ...). Forgetting is the user's right;

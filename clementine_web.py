@@ -337,17 +337,7 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
 
     @app.get("/api/memories")
     def memories():
-        c = holder["c"]
-        facts = [{"handle": k, "text": f"{k}: {v['value']}",
-                  "tags": v.get("tags") or []}
-                 for k, v in c.memory.facts.items()]
-        notes = [{"handle": f"n{i}", "text": n["text"],
-                  "tags": n.get("tags") or []}
-                 for i, n in enumerate(c.memory.notes, 1)]
-        reflections = [{"handle": f"r{i}", "text": r["text"], "tags": []}
-                       for i, r in enumerate(c.memory.reflections, 1)]
-        return jsonify({"facts": facts, "notes": notes,
-                        "reflections": reflections})
+        return jsonify(holder["c"].list_memories())
 
     @app.post("/api/reflect")
     def reflect():

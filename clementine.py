@@ -36,6 +36,7 @@ HELP = """Commands:
   /style <text>     tune her voice, e.g. /style more poetic, fewer questions
   /temp <0.0-1.5>   set temperature (playfulness)
   /model <tag>      switch the local model, e.g. /model llama3.2:3b
+  /expose           dump local state (no cloud)
   /exit             say goodbye (everything is saved automatically)
 """
 
@@ -164,6 +165,88 @@ def main():
         greeting += f" — you last spoke {gap}"
     print(f"{greeting}. Type /help for commands, /exit to quit.\n")
 
+    def dispatch(user_input: str) -> str | None:
+        """Handle slash-commands. Returns 'exit' to quit, '' if handled,
+        None if the line should go to chat."""
+        nonlocal name
+        low = user_input.lower()
+        if low in ("/exit", "exit", "quit"):
+            return "exit"
+        if low == "/help":
+            print(HELP)
+            return ""
+        if low.startswith("/name "):
+            companion.set_name(user_input[6:])
+            name = companion.personality.name
+            print(f"[She is now called {name}.]\n")
+            return ""
+        if low.startswith("/iam "):
+            companion.personality.human_name = user_input[5:].strip()
+            companion.save()
+            print(f"[She knows you as {companion.personality.human_name}.]\n")
+            return ""
+        if low.startswith("/remember "):
+            companion.remember(user_input[10:])
+            print("[Remembered, permanently.]\n")
+            return ""
+        if low.startswith("/fact "):
+            parts = user_input[6:].split(" ", 1)
+            if len(parts) == 2:
+                companion.remember_fact(parts[0], parts[1])
+                print(f"[Fact remembered: {parts[0]} = {parts[1]}]\n")
+            else:
+                print("[Usage: /fact <key> <value>, e.g. /fact birthday June 3]\n")
+            return ""
+        if low.startswith("/notes"):
+            print(companion.format_memories(user_input[6:].strip()) or "(empty)\n")
+            return ""
+        if low.startswith("/forget "):
+            forgotten = companion.forget(user_input[8:])
+            if forgotten:
+                print(f"[Forgotten: {forgotten}]\n")
+            else:
+                print("[Nothing matched. Use a fact key or a note number from /notes.]\n")
+            return ""
+        if low.startswith("/editnote "):
+            parts = user_input[10:].split(" ", 1)
+            if len(parts) == 2 and companion.edit_note(parts[0], parts[1]):
+                print("[Note rewritten.]\n")
+            else:
+                print("[Usage: /editnote n<N> <new text> — numbers are in /notes]\n")
+            return ""
+        if low.startswith("/style "):
+            companion.personality.style_notes = user_input[7:].strip()
+            companion.save()
+            print("[Style noted.]\n")
+            return ""
+        if low.startswith("/temp "):
+            try:
+                companion.personality.temperature = float(user_input[6:])
+                companion.save()
+                print(f"[Temperature set to {companion.personality.temperature}.]\n")
+            except ValueError:
+                print("[Please give a number, e.g. /temp 0.8]\n")
+            return ""
+        if low.startswith("/model "):
+            companion.set_model(user_input[7:])
+            print(f"[Now using model: {companion.model} — remembered for this profile]\n")
+            return ""
+        if low.startswith("/summary"):
+            topic = user_input[8:].strip()
+            print(f"{name}: {companion.summarize(topic)}\n")
+            return ""
+        if low == "/reflect":
+            print(f"{name} reflects…\n{companion.reflect()}\n")
+            return ""
+        if low in ("/expose", "/status"):
+            from crystalcore.expose import full_expose
+            import json
+            print(json.dumps(full_expose(companion=companion, include_prompt=False),
+                             indent=2, ensure_ascii=False)[:8000])
+            print("\n[truncated if long — full: python -m crystalcore.expose]\n")
+            return ""
+        return None
+
     while True:
         try:
             user_input = read_user_message()
@@ -173,84 +256,16 @@ def main():
         if not user_input:
             continue
 
-        if user_input.lower() in ("/exit", "exit", "quit"):
+        result = dispatch(user_input) if user_input.startswith("/") or user_input.lower() in (
+            "exit", "quit") else None
+        if result == "exit":
             break
-        elif user_input.lower() == "/help":
-            print(HELP)
-        elif user_input.lower().startswith("/name "):
-            companion.set_name(user_input[6:])
-            name = companion.personality.name
-            print(f"[She is now called {name}.]\n")
-        elif user_input.lower().startswith("/iam "):
-            companion.personality.human_name = user_input[5:].strip()
-            companion.save()
-            print(f"[She knows you as {companion.personality.human_name}.]\n")
-        elif user_input.lower().startswith("/remember "):
-            companion.remember(user_input[10:])
-            print("[Remembered, permanently.]\n")
-        elif user_input.lower().startswith("/fact "):
-            parts = user_input[6:].split(" ", 1)
-            if len(parts) == 2:
-                companion.remember_fact(parts[0], parts[1])
-                print(f"[Fact remembered: {parts[0]} = {parts[1]}]\n")
-            else:
-                print("[Usage: /fact <key> <value>, e.g. /fact birthday June 3]\n")
-        elif user_input.lower().startswith("/notes"):
-            want = user_input[6:].strip().lstrip("#").lower()
-            def _shown(store):
-                return not want or want in (store.get("tags") or [])
-            for key, fact in companion.memory.facts.items():
-                if not _shown(fact):
-                    continue
-                tags = " ".join("#" + t for t in fact.get("tags") or [])
-                print(f"  - {key}: {fact['value']}"
-                      f"{'  [' + tags + ']' if tags else ''}  ({fact['updated']})")
-            for i, note in enumerate(companion.memory.notes, 1):
-                if not _shown(note):
-                    continue
-                tags = " ".join("#" + t for t in note.get("tags") or [])
-                print(f"  n{i} - {note['text']}"
-                      f"{'  [' + tags + ']' if tags else ''}  ({note['when']})")
-            if companion.memory.reflections and not want:
-                print("  her own reflections (hold lightly; /forget rN removes one):")
-                for i, r in enumerate(companion.memory.reflections, 1):
-                    print(f"  r{i} - {r['text']}  ({r['when']})")
-            print()
-        elif user_input.lower().startswith("/forget "):
-            forgotten = companion.forget(user_input[8:])
-            if forgotten:
-                print(f"[Forgotten: {forgotten}]\n")
-            else:
-                print("[Nothing matched. Use a fact key or a note number from /notes.]\n")
-        elif user_input.lower().startswith("/editnote "):
-            parts = user_input[10:].split(" ", 1)
-            if len(parts) == 2 and companion.edit_note(parts[0], parts[1]):
-                print("[Note rewritten.]\n")
-            else:
-                print("[Usage: /editnote n<N> <new text> — numbers are in /notes]\n")
-        elif user_input.lower().startswith("/style "):
-            companion.personality.style_notes = user_input[7:].strip()
-            companion.save()
-            print("[Style noted.]\n")
-        elif user_input.lower().startswith("/temp "):
-            try:
-                companion.personality.temperature = float(user_input[6:])
-                companion.save()
-                print(f"[Temperature set to {companion.personality.temperature}.]\n")
-            except ValueError:
-                print("[Please give a number, e.g. /temp 0.8]\n")
-        elif user_input.lower().startswith("/model "):
-            companion.set_model(user_input[7:])
-            print(f"[Now using model: {companion.model} — remembered for this profile]\n")
-        elif user_input.lower().startswith("/summary"):
-            topic = user_input[8:].strip()
-            print(f"{name}: {companion.summarize(topic)}\n")
-        elif user_input.lower() == "/reflect":
-            print(f"{name} reflects…\n{companion.reflect()}\n")
-        else:
-            print(f"{name}: ", end="", flush=True)
-            companion.chat(user_input, stream_to=sys.stdout)
-            print()
+        if result is not None:
+            continue
+
+        print(f"{name}: ", end="", flush=True)
+        companion.chat(user_input, stream_to=sys.stdout)
+        print()
 
     print(f"\n{name} sleeps. Your conversations stay on this device, in "
           f"'{companion.memory_dir}/'. Non solus.")

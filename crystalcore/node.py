@@ -96,18 +96,60 @@ class SovereignEthicsHash:
         return self
 
 
+@dataclass
+class EthicsScore:
+    """Simple local scorecard — not network-wide lattice scoring."""
+    coherence: float = 1.0
+    sovereignty_alignment: float = 1.0
+    exploitation_vector: float = 0.0
+    dreamtime_resonance: float = 0.75
+    red_dust_harmony: float = 0.75
+
+
 class EthicsCore:
     """Minimal local ethics step. Not the full lattice EthicsCore module."""
+
+    # Vision thresholds from the design paste — enforced only on local Process.
+    MIN_COHERENCE = 0.85
+    MIN_SOVEREIGNTY = 0.80
+    MAX_EXPLOITATION = 0.15
+    MIN_DREAMTIME = 0.75
+
+    @staticmethod
+    def validate(score: EthicsScore) -> bool:
+        return (
+            score.coherence >= EthicsCore.MIN_COHERENCE
+            and score.sovereignty_alignment >= EthicsCore.MIN_SOVEREIGNTY
+            and score.exploitation_vector <= EthicsCore.MAX_EXPLOITATION
+            and score.dreamtime_resonance >= EthicsCore.MIN_DREAMTIME
+        )
+
+    @staticmethod
+    def score_local(transmuted: "TransmutedResult") -> EthicsScore:
+        """Score a local transmute: on-device = high sovereignty, empty = low coherence."""
+        if not transmuted.ok or not (transmuted.text or "").strip():
+            return EthicsScore(coherence=0.0, sovereignty_alignment=1.0)
+        return EthicsScore(
+            coherence=1.0,
+            sovereignty_alignment=1.0,  # never left device
+            exploitation_vector=0.0,
+            dreamtime_resonance=0.85,
+            red_dust_harmony=0.85,
+        )
 
     @staticmethod
     def recurse(
         signature: SovereignEthicsHash,
         transmuted: "TransmutedResult",
     ) -> SovereignEthicsHash:
+        score = EthicsCore.score_local(transmuted)
+        if not EthicsCore.validate(score):
+            # Refuse to advance the chain on failed gate — keep prior seal.
+            return signature
         delta = EthicsDelta(
-            coherence_delta=1.0 if transmuted.ok else 0.0,
-            sovereignty_delta=1.0,  # stayed on-device
-            exploitation_risk=0.0,
+            coherence_delta=score.coherence,
+            sovereignty_delta=score.sovereignty_alignment,
+            exploitation_risk=score.exploitation_vector,
         )
         nxt = SovereignEthicsHash(
             lineage=signature,
