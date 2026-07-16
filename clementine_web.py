@@ -75,7 +75,7 @@ PAGE = """<!doctype html>
   <select id="profiles" title="Profile — separate person, separate memory"></select>
   <input id="newprofile" placeholder="new profile" size="9">
   <button class="small" id="mkprofile" type="button">create</button>
-  <small>local only · 127.0.0.1</small>
+  <small id="bindhint">UI · 127.0.0.1</small>
 </div></header>
 <main>
   <div id="chatcol">
@@ -101,7 +101,13 @@ PAGE = """<!doctype html>
     <form id="pmeta">
       <input id="pavatar" placeholder="Avatar emoji, e.g. 🌟" size="12">
       <input id="pdesc" placeholder="Short description" style="width:100%;margin-top:8px">
-      <input id="pmodel" placeholder="Model for this profile (e.g. llama3.2:3b)" style="width:100%;margin-top:8px">
+      <input id="pmodel" placeholder="Model (llama3.1:8b or grok-4.5)" style="width:100%;margin-top:8px">
+      <label style="display:block;margin-top:8px;color:var(--muted);font-size:.85rem">Chat provider
+        <select id="pprovider" style="width:100%;margin-top:4px">
+          <option value="ollama">ollama (local)</option>
+          <option value="spacexai">spacexai (xAI API)</option>
+        </select>
+      </label>
       <button style="margin-top:8px">Save profile</button>
     </form>
     <div style="margin-top:14px">
@@ -109,8 +115,8 @@ PAGE = """<!doctype html>
     </div>
   </aside>
 </main>
-<footer>Everything on this page stays on your device. Her memory lives in a
-local folder you own. Non solus.</footer>
+<footer id="foot">Memory is always local. Chat uses the selected provider.
+Non solus.</footer>
 <script>
 const log = document.getElementById('log');
 function bubble(who, text){
@@ -307,6 +313,22 @@ document.getElementById('send').onsubmit = async (e) => {
   controller = null;
   refreshMems();
 };
+function paintBackend(data){
+  const prov = data.provider || 'ollama';
+  const model = data.model || '';
+  const keyOk = data.xai_key_present;
+  const foot = document.getElementById('foot');
+  const hint = document.getElementById('bindhint');
+  if (prov === 'spacexai'){
+    hint.textContent = 'SpaceXAI · ' + model + (keyOk ? '' : ' · no key');
+    foot.textContent = 'Chat goes to api.x.ai (' + model + '). Memory files stay on this device. UI is 127.0.0.1 only. Non solus.';
+  } else {
+    hint.textContent = 'local · 127.0.0.1';
+    foot.textContent = 'Everything on this page stays on your device. Her memory lives in a local folder you own. Non solus.';
+  }
+  const psel = document.getElementById('pprovider');
+  if (psel) psel.value = prov === 'spacexai' ? 'spacexai' : 'ollama';
+}
 async function refreshProfiles(){
   const r = await fetch('/api/profile'); const data = await r.json();
   const sel = document.getElementById('profiles'); sel.innerHTML = '';
@@ -321,9 +343,13 @@ async function refreshProfiles(){
       document.getElementById('pavatar').value = p.avatar || '';
       document.getElementById('pdesc').value = p.description || '';
       document.getElementById('pmodel').value = p.model || '';
+      paintBackend({provider: p.provider || data.provider,
+                    model: p.model || data.model,
+                    xai_key_present: data.xai_key_present});
     }
     sel.appendChild(o);
   }
+  if (data.provider) paintBackend(data);
 }
 async function switchProfile(name){
   const r = await fetch('/api/profile', {method:'POST',
@@ -334,6 +360,7 @@ async function switchProfile(name){
     document.getElementById('hername').textContent = data.name;
     log.innerHTML = '';
     bubble('her', `(profile: ${data.profile} — her memory of you here is separate)`);
+    if (data.provider || data.model) paintBackend(data);
     refreshProfiles(); refreshMems();
   }
 }
@@ -360,7 +387,8 @@ document.getElementById('pmeta').onsubmit = async (e) => {
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({avatar: document.getElementById('pavatar').value.trim(),
                           description: document.getElementById('pdesc').value.trim(),
-                          model: document.getElementById('pmodel').value.trim()})});
+                          model: document.getElementById('pmodel').value.trim(),
+                          provider: document.getElementById('pprovider').value})});
   refreshProfiles();
 };
 document.getElementById('reflectbtn').onclick = async () => {
@@ -498,13 +526,23 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
                                  "avatar": c.personality.avatar,
                                  "description": c.personality.description,
                                  "name": c.personality.name,
-                                 "model": c.model})
+                                 "model": c.model,
+                                 "provider": c.provider})
             elif n == "default":
                 profiles.append({"profile": n, "avatar": "",
-                                 "description": "", "name": "", "model": ""})
+                                 "description": "", "name": "", "model": "",
+                                 "provider": ""})
             else:
-                profiles.append(profile_meta(n))
-        return jsonify({"current": current, "profiles": profiles})
+                meta = profile_meta(n)
+                profiles.append(meta)
+        from crystalcore import xai_api_key_present
+        return jsonify({
+            "current": current,
+            "profiles": profiles,
+            "provider": c.provider,
+            "model": c.model,
+            "xai_key_present": xai_api_key_present(),
+        })
 
     @app.post("/api/profile/meta")
     def profile_meta_set():
@@ -514,10 +552,12 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
             c.personality.avatar = str(data["avatar"]).strip()[:8]
         if "description" in data:
             c.personality.description = str(data["description"]).strip()[:200]
+        if "provider" in data and str(data["provider"]).strip():
+            c.set_provider(str(data["provider"]))
         if "model" in data and str(data["model"]).strip():
             c.set_model(str(data["model"]))
         c.save()
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "provider": c.provider, "model": c.model})
 
     @app.post("/api/profile/delete")
     def profile_delete():
@@ -535,11 +575,20 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
         except ValueError:
             return jsonify({"ok": False, "error": "invalid name"}), 400
         old = holder["c"]
-        holder["c"] = Clementine(model=old.model, memory_dir=target,
+        # Do not pass the previous profile's provider — the target folder's
+        # config.json (and model heuristics) decide the backend.
+        holder["c"] = Clementine(memory_dir=target,
                                  embed_model=old.embed_model)
         c = holder["c"]
-        return jsonify({"ok": True, "profile": _profile_of(c),
-                        "name": c.personality.name or "Clementine"})
+        from crystalcore import xai_api_key_present
+        return jsonify({
+            "ok": True,
+            "profile": _profile_of(c),
+            "name": c.personality.name or "Clementine",
+            "provider": c.provider,
+            "model": c.model,
+            "xai_key_present": xai_api_key_present(),
+        })
 
     # ----- full transparency (localhost only; never leave the device) -----
 
@@ -563,10 +612,17 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
     def prompt():
         c = holder["c"]
         q = (request.args.get("q") or "").strip()
+        from crystalcore.companion import (
+            BASE_PROMPT_LOCAL,
+            BASE_PROMPT_SPACEXAI,
+            PROVIDER_SPACEXAI,
+        )
+        base = (BASE_PROMPT_SPACEXAI
+                if getattr(c, "provider", "") == PROVIDER_SPACEXAI
+                else BASE_PROMPT_LOCAL)
         return jsonify({
-            "base_prompt": __import__(
-                "crystalcore.companion", fromlist=["BASE_PROMPT"]
-            ).BASE_PROMPT,
+            "base_prompt": base,
+            "provider": getattr(c, "provider", "ollama"),
             "system_prompt_live": c.system_prompt(q),
             "personality": companion_dump(c, include_prompt=False)["personality"],
         })
@@ -575,10 +631,17 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
 
 
 def main():
+    import os
+    from crystalcore import load_dotenv, xai_api_key_present
+
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="Clementine's local web interface (127.0.0.1 only).")
     parser.add_argument("--model", default="llama3.1:8b",
-                        help="Ollama model tag (same choices as the CLI).")
+                        help="Model id (Ollama tag or grok-* for SpaceXAI).")
+    parser.add_argument("--provider", default="",
+                        help="ollama (local) or spacexai (opt-in; XAI_API_KEY).")
     parser.add_argument("--memory-dir", default="clementine_memory",
                         help="Her memory folder (shared with the CLI).")
     parser.add_argument("--profile", default="",
@@ -588,13 +651,21 @@ def main():
     if args.profile:
         args.memory_dir = profile_dir(args.profile)
 
-    companion = Clementine(model=args.model, memory_dir=args.memory_dir)
+    provider = (args.provider or os.environ.get("CRYSTAL_PROVIDER", "")).strip()
+    companion = Clementine(model=args.model, memory_dir=args.memory_dir,
+                           provider=provider)
     app = create_app(companion, port=args.port)
     name = companion.personality.name or "Clementine"
     print(f"{name} is at home: open http://127.0.0.1:{args.port}")
-    print("Local only — nothing leaves this device. Ctrl+C to say goodnight.")
-    # Never bind beyond localhost, never enable the debugger: sovereignty
-    # means this page is reachable from this machine alone.
+    if companion.provider == "spacexai":
+        print(f"SpaceXAI chat ({companion.model}) — memory stays local. "
+              "UI still binds 127.0.0.1 only.")
+        if not xai_api_key_present():
+            print("WARNING: XAI_API_KEY not set — add it to .env before chatting.")
+    else:
+        print("Local only — chat via Ollama. Ctrl+C to say goodnight.")
+    # Never bind beyond localhost, never enable the debugger: the UI is
+    # reachable from this machine alone (chat may leave if SpaceXAI is on).
     app.run(host="127.0.0.1", port=args.port, debug=False)
 
 

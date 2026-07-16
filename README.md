@@ -22,18 +22,18 @@ This is the beginning of **TerAustralis Incognita** — Australia's contribution
 
 ## CrystalCore — The Framework
 
-**CrystalCore** is this project's independent, open-source framework for building sovereign, locally-run AI companions — and **Clementine** is the first companion living on it. The name is inspired by the ordered structures of crystallography — building AI companions with clarity, stability, and user-defined structure. It runs entirely on your own device using open-source models via Ollama. No cloud, no account, no surveillance.
+**CrystalCore** is this project's independent, open-source framework for building sovereign, locally-run AI companions — and **Clementine** is the first companion living on it. The name is inspired by the ordered structures of crystallography — building AI companions with clarity, stability, and user-defined structure. **Default:** open-source models via Ollama on your device — no cloud, no account, no surveillance. **Opt-in:** SpaceXAI (xAI) for chat only when you choose it.
 
-- **Sovereign & local-first** — everything runs and stays on your device
+- **Sovereign & local-first** — memory, embeddings, and files stay on your device; chat is local unless you opt into SpaceXAI
 - **Layered memory** — recent conversation, auto-summarized history, permanent facts & notes, and her own gentle reflections
 - **Semantic recall** — memories retrieved by meaning (local embeddings), with recency fading and `#tag` filtering
-- **Profiles** — multiple isolated companions, each with their own memory, name, avatar, and model
+- **Profiles** — multiple isolated companions, each with their own memory, name, avatar, model, and provider
 - **Real-time interaction** — streaming replies in the terminal and a local web interface
 - **Full user control** — view, edit, tag, and forget any memory, including her reflections
 
-**Tech:** Python + Flask · plain human-readable JSON storage · local Ollama embeddings · open-source LLMs (Llama, Qwen, Gemma…). See [CLEMENTINE.md](CLEMENTINE.md) to run her.
+**Tech:** Python + Flask · plain human-readable JSON storage · local Ollama embeddings · open-source LLMs (Llama, Qwen, Gemma…) by default · optional **SpaceXAI** (xAI / `grok-4.5`) for chat when you set `XAI_API_KEY`. See [CLEMENTINE.md](CLEMENTINE.md) to run her.
 
-> **Disclaimer:** CrystalCore is an independent, open-source project. It is not affiliated with, endorsed by, or connected to xAI, Grok, Tesla, or any other AI company or platform. All memories and data remain on the user's device.
+> **Disclaimer:** CrystalCore is an independent, open-source project. It is not affiliated with, endorsed by, or connected to xAI, Grok, Tesla, or any other AI company or platform. Memory files remain on the user's device. Optional SpaceXAI chat sends conversation text to the xAI API only when the user selects that provider.
 
 ## In this repository
 

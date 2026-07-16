@@ -18,11 +18,18 @@ from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from .companion import BASE_PROMPT, Clementine, MAX_MEMORIES
+from .companion import (
+    BASE_PROMPT,
+    BASE_PROMPT_LOCAL,
+    BASE_PROMPT_SPACEXAI,
+    Clementine,
+    MAX_MEMORIES,
+)
 from .memory import Memory, Personality
 from .node import IncognitaNode, local_node
 from .ollama import CHAT_URL, DEFAULT_EMBED_MODEL, EMBED_URL
 from .profiles import PROFILES_DIR, list_profiles, profile_meta
+from .spacexai import BASE_URL as SPACEXAI_BASE_URL, DEFAULT_MODEL as SPACEXAI_DEFAULT_MODEL
 from .version import __version__
 
 
@@ -53,7 +60,8 @@ def package_surface() -> dict[str, Any]:
         "version": __version__,
         "package": "crystalcore",
         "modules": [
-            "companion", "memory", "profiles", "ollama", "node", "expose",
+            "companion", "memory", "profiles", "ollama", "spacexai",
+            "envutil", "node", "expose",
         ],
         "exports": sorted(getattr(pkg, "__all__", [])),
         "constants": {
@@ -61,6 +69,8 @@ def package_surface() -> dict[str, Any]:
             "DEFAULT_EMBED_MODEL": DEFAULT_EMBED_MODEL,
             "CHAT_URL": CHAT_URL,
             "EMBED_URL": EMBED_URL,
+            "SPACEXAI_BASE_URL": SPACEXAI_BASE_URL,
+            "SPACEXAI_DEFAULT_MODEL": SPACEXAI_DEFAULT_MODEL,
             "PROFILES_DIR": str(PROFILES_DIR),
         },
         "dataclass_fields": {
@@ -72,7 +82,12 @@ def package_surface() -> dict[str, Any]:
             "crystalmatrix_implemented": False,
             "data_leaves_device_by_default": False,
             "web_binds": "127.0.0.1 only",
-            "cloud_ai_in_this_package": False,
+            "cloud_ai_in_this_package": True,
+            "cloud_ai_note": (
+                "SpaceXAI (xAI) is optional opt-in for chat only. "
+                "Default remains local Ollama. Memory/embeddings stay local. "
+                "Requires XAI_API_KEY when provider=spacexai."
+            ),
         },
     }
 
@@ -111,6 +126,7 @@ def companion_dump(c: Clementine, *, include_prompt: bool = True) -> dict[str, A
     mem = _dc(c.memory)
     out: dict[str, Any] = {
         "model": c.model,
+        "provider": getattr(c, "provider", "ollama"),
         "embed_model": c.embed_model,
         "memory_dir": str(Path(c.memory_dir).resolve()),
         "max_recent_turns": c.max_recent_turns,
@@ -132,7 +148,11 @@ def companion_dump(c: Clementine, *, include_prompt: bool = True) -> dict[str, A
     }
     if include_prompt:
         out["system_prompt_live"] = c.system_prompt("")
-        out["base_prompt"] = BASE_PROMPT
+        out["base_prompt"] = (
+            BASE_PROMPT_SPACEXAI
+            if getattr(c, "provider", "ollama") == "spacexai"
+            else BASE_PROMPT_LOCAL
+        )
     return out
 
 

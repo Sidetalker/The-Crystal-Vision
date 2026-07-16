@@ -31,6 +31,7 @@ clementine_web.py       local web interface
 |-----------|---------|--------|
 | **System Prompt** | Her core personality, rules, and values | ✅ Done |
 | **Local LLM Connection** | Connects to a model on the user's device via Ollama | ✅ Working (streaming) |
+| **SpaceXAI (opt-in)** | Optional chat via xAI API (`grok-4.5`); memory & embeddings stay local; web provider picker; per-profile provider; offline tests | ✅ Working (v0.13.1) |
 | **Memory System** | Rolling short-term memory + auto-summarised long-term history + key-value facts + permanent notes | ✅ Working (v2) |
 | **Semantic Recall** | Finds relevant memories by *meaning* using local Ollama embeddings — no cloud, no PyTorch | ✅ Working (v3) |
 | **User Control** | Change her name, teach/forget/edit her memories, tag them, tune her voice | ✅ Working (`/name`, `/iam`, `/fact`, `/remember`, `/notes`, `/forget`, `/editnote`, `/style`, `/temp`) |
@@ -50,10 +51,11 @@ clementine_web.py       local web interface
 
 ## Current State
 
-- A solid **system prompt** defines who she is.
-- The **Python framework** (`clementine.py`) runs today: it connects to a local model through Ollama, streams her replies, and keeps layered memory between sessions.
-- She **remembers** — recent conversation stays verbatim; older conversation is automatically condensed into summaries so nothing is lost and the context never overflows; explicit facts and notes persist forever in a local `clementine_memory/` folder.
-- To run her, you need a local model (via Ollama). See the [README](README.md) and the run steps below.
+- A solid **system prompt** defines who she is (separate honest wording for local vs SpaceXAI).
+- The **Python framework** (`clementine.py`) runs today: **default** chat is local Ollama; **optional** SpaceXAI (`--provider spacexai` / `/provider spacexai` / web picker) uses `XAI_API_KEY` and `grok-4.5` (see [docs.x.ai](https://docs.x.ai)). Streaming works on both paths.
+- She **remembers** — recent conversation stays verbatim; older conversation is automatically condensed into summaries so nothing is lost and the context never overflows; explicit facts and notes persist forever in a local `clementine_memory/` folder (never uploaded by the framework).
+- **Embeddings** for semantic recall stay on local Ollama even when chat uses SpaceXAI.
+- Local path needs Ollama + a model. SpaceXAI path needs a key in `.env` (see `.env.example`). Offline provider tests: `python -m unittest tests.test_provider -v`.
 
 ## Running Clementine
 
@@ -103,6 +105,39 @@ python clementine.py --model llama3.1:8b-instruct-q5_K_M   # higher quality
 ```
 
 You can also switch mid-conversation with `/model <tag>`.
+
+### SpaceXAI (optional cloud chat)
+
+Sovereignty stays the **default**: Ollama on your machine. If you want Grok-class replies without abandoning CrystalCore memory, you can **opt in** to SpaceXAI (xAI’s API — OpenAI-compatible).
+
+What leaves the device: **chat messages** for inference only.  
+What stays local: **memory files**, **embeddings**, **profiles**, and the web UI (still `127.0.0.1`).
+
+```bash
+# 1. Key from https://console.x.ai  →  put in a git-ignored .env
+#    XAI_API_KEY=xai-...
+#    (see .env.example)
+
+# 2. Run with SpaceXAI
+python clementine.py --provider spacexai --model grok-4.5
+# Windows: double-click Start-Lumina-SpaceXAI.bat
+# Web UI: python clementine_web.py --provider spacexai
+#   then pick "spacexai" under This profile → Save
+# or mid-session:
+#   /provider spacexai
+#   /model grok-4.5
+```
+
+| Switch | Meaning |
+|--------|---------|
+| `--provider ollama` | Local (default). Nothing leaves the machine. |
+| `--provider spacexai` | Chat via `https://api.x.ai/v1`. Needs `XAI_API_KEY`. |
+| `CRYSTAL_PROVIDER=spacexai` | Same as `--provider` without the flag. |
+| `/model grok-4.5` | Auto-selects SpaceXAI when the tag looks like a Grok model. |
+
+Check current models and pricing: [docs.x.ai/developers/models](https://docs.x.ai/developers/models). Default SpaceXAI model in this project: **`grok-4.5`**.
+
+When SpaceXAI is on, her system prompt **honestly** says chat may leave the device — she will not claim full offline mode while that path is active.
 
 | Quantization | Approx. size vs FP16 | Quality | Best for |
 |--------------|----------------------|---------|----------|

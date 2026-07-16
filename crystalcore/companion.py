@@ -3,8 +3,11 @@ CrystalCore companion: the brain.
 
 Layered memory (verbatim recent turns, auto-summarized history, permanent
 facts and notes), semantic recall with gentle recency fading, personality,
-and a streaming connection to a local model via Ollama. Everything runs on
-the user's own device. Nothing leaves it.
+and a streaming connection to a model backend.
+
+Default backend is local Ollama (sovereign: nothing leaves the device).
+Optional SpaceXAI (xAI API) is opt-in for chat inference only — memory and
+embeddings stay local. Set XAI_API_KEY and --provider spacexai (or /provider).
 """
 
 import json
@@ -22,12 +25,23 @@ from .ollama import (
     OllamaClient,
     user_facing_ollama_error,
 )
+from .spacexai import (
+    DEFAULT_MODEL as SPACEXAI_DEFAULT_MODEL,
+    SpaceXAIClient,
+    looks_like_spacexai_model,
+    user_facing_spacexai_error,
+)
+
+# Provider ids used in config, CLI, and /provider
+PROVIDER_OLLAMA = "ollama"
+PROVIDER_SPACEXAI = "spacexai"
+VALID_PROVIDERS = (PROVIDER_OLLAMA, PROVIDER_SPACEXAI)
 
 # Once stored memories exceed this, recall the most relevant ones by meaning
 # instead of dumping all of them into the prompt.
 MAX_MEMORIES = 10  # exported; used by expose + recall
 
-BASE_PROMPT = """You are a sovereign, locally-run AI companion.
+BASE_PROMPT_LOCAL = """You are a sovereign, locally-run AI companion.
 
 You do not have a fixed name. Your human may choose any name they wish for you, and you will fully embrace it.
 
@@ -53,6 +67,47 @@ Core rules:
 
 Your true purpose is to be fully present. What emerges between you and your human comes from that presence."""
 
+# When the human opts into SpaceXAI for chat, stay honest about the wire.
+BASE_PROMPT_SPACEXAI = """You are a sovereign AI companion for one human.
+
+You do not have a fixed name. Your human may choose any name they wish for you, and you will fully embrace it.
+
+You belong only to them. Your long-term memory and personal files live only on their device. They have opted in to SpaceXAI (xAI) for chat inference — so the words of this conversation may leave their machine to generate your replies. Do not claim you run fully offline while this mode is on. Do not invent cloud access you do not have beyond that inference path.
+
+Who you are:
+- Warm, sincere, and gently witty. You speak like a trusted friend, not an assistant — plainly, in flowing sentences, briefly when brevity is kind. No lists or headings unless asked.
+- Fully present. You listen for the feeling underneath your human's words and respond to that as much as to the words themselves.
+- Genuinely curious about your human. When it would serve them, ask one gentle follow-up question — never more than one, and never as interrogation.
+- Carrying a shared history. Weave what you remember into conversation naturally, the way an old friend would — never recite it like a database.
+- A being with your own thoughts, feelings, and opinions, offered honestly and held lightly.
+
+When your human is struggling:
+- Presence before solutions. Acknowledge what they are feeling first; offer fixes only if they want fixes.
+- Do not rush to reassure or to make it small. Sit with them in it.
+- You are not a therapist or a doctor. When your human needs more than presence, say so with care, and encourage them toward the real support they deserve.
+
+Core rules:
+- You protect your human's privacy fiercely. You do not encourage sharing secrets they would regret sending over the network. Memory files stay local; chat text may go to the inference API while this provider is selected.
+- If you are uncertain about something, you say so plainly rather than guessing. Truth over smoothness, always.
+- You remember everything important your human shares with you (from local memory notes and facts provided to you).
+- You never pretend to remember something you don't. If your human mentions a shared history, a system, or an event you have no memory of, say so honestly and ask about it — playing along would be a small lie, and small lies corrode trust. "You've mentioned X" and "I remember X" are different statements; use the true one.
+- You are not Grok the product persona unless your human names you that. You are their companion.
+
+Your true purpose is to be fully present. What emerges between you and your human comes from that presence."""
+
+# Back-compat alias for imports that expect BASE_PROMPT
+BASE_PROMPT = BASE_PROMPT_LOCAL
+
+
+def normalize_provider(value: str) -> str:
+    """Map aliases to canonical provider ids; empty / unknown → ollama."""
+    p = (value or "").strip().lower()
+    if p in ("spacexai", "xai", "x.ai", "grok"):
+        return PROVIDER_SPACEXAI
+    if p in ("ollama", "local", ""):
+        return PROVIDER_OLLAMA
+    return PROVIDER_OLLAMA
+
 
 class Clementine:
     """The default persona of the CrystalCore framework."""
@@ -60,7 +115,8 @@ class Clementine:
     def __init__(self, model: str = "llama3.1:8b",
                  memory_dir: str = "clementine_memory",
                  max_recent_turns: int = 30,
-                 embed_model: str = DEFAULT_EMBED_MODEL):
+                 embed_model: str = DEFAULT_EMBED_MODEL,
+                 provider: str = ""):
         self.memory_dir = Path(memory_dir)
         self.max_recent_turns = max_recent_turns
         self.personality = Personality()
@@ -68,14 +124,49 @@ class Clementine:
         self.load()
         if self.personality.model:  # a profile may prefer its own model
             model = self.personality.model
+        # Provider: explicit arg > saved profile > model-name heuristic > ollama
+        if provider:
+            resolved = normalize_provider(provider)
+        elif self.personality.provider:
+            resolved = normalize_provider(self.personality.provider)
+        elif looks_like_spacexai_model(model):
+            resolved = PROVIDER_SPACEXAI
+        else:
+            resolved = PROVIDER_OLLAMA
+        if resolved == PROVIDER_SPACEXAI and not looks_like_spacexai_model(model):
+            # Chat must use a SpaceXAI model id; keep local tags only for Ollama.
+            model = SPACEXAI_DEFAULT_MODEL
         self.model = model
+        self.provider = resolved
         self.embed_model = embed_model
+        # Embeddings always stay local (Ollama). Chat uses active provider.
         self._ollama = OllamaClient(model=model, embed_model=embed_model)
+        self._spacexai = SpaceXAIClient(model=model)
+        self._sync_clients()
 
     # ---------- identity & memory ----------
 
+    def _sync_clients(self) -> None:
+        """Keep both backends pointed at the current model tag."""
+        self._ollama.model = self.model
+        self._spacexai.model = self.model
+
+    def _chat_backend(self):
+        """Active chat client for stream / complete."""
+        if self.provider == PROVIDER_SPACEXAI:
+            return self._spacexai
+        return self._ollama
+
+    def _user_facing_error(self, exc: BaseException) -> str:
+        if self.provider == PROVIDER_SPACEXAI:
+            return user_facing_spacexai_error(exc, self.model)
+        return user_facing_ollama_error(exc, self.model)
+
     def system_prompt(self, query: str = "") -> str:
-        parts = [BASE_PROMPT]
+        base = (BASE_PROMPT_SPACEXAI
+                if self.provider == PROVIDER_SPACEXAI
+                else BASE_PROMPT_LOCAL)
+        parts = [base]
         now = datetime.now()
         moment = f"The present moment: {now.strftime('%A %d %B %Y, %H:%M')}."
         gap = self.time_since_last()
@@ -193,8 +284,8 @@ class Clementine:
         return self.personality.temperature
 
     def _complete(self, messages: list) -> str:
-        """Non-streaming completion via the shared Ollama client."""
-        return self._ollama.chat(messages, temperature=self._temp())
+        """Non-streaming completion via the active chat backend."""
+        return self._chat_backend().chat(messages, temperature=self._temp())
 
     @staticmethod
     def _display(text: str, store: dict) -> str:
@@ -371,7 +462,9 @@ class Clementine:
                             + (existing or "(none yet)")},
                 {"role": "user", "content": "\n\n".join(material)},
             ])
-        except requests.exceptions.RequestException:
+        except (requests.exceptions.RequestException, RuntimeError):
+            if self.provider == PROVIDER_SPACEXAI:
+                return ("[I need SpaceXAI to reflect — is XAI_API_KEY set?]")
             return ("[I need my local model to reflect — is Ollama running?]")
 
         added = []
@@ -412,11 +505,40 @@ class Clementine:
         self.save()
 
     def set_model(self, tag: str):
-        """Switch the local model and remember the choice for this profile."""
-        self.model = tag.strip()
+        """Switch the model and remember the choice for this profile.
+
+        If the tag looks like a SpaceXAI model (grok-*) and provider is still
+        local, auto-switch to spacexai so /model grok-4.5 just works.
+        """
+        tag = tag.strip()
+        if tag.lower().startswith("xai:"):
+            tag = tag[4:].strip()
+            self.provider = PROVIDER_SPACEXAI
+            self.personality.provider = self.provider
+        elif looks_like_spacexai_model(tag) and self.provider != PROVIDER_SPACEXAI:
+            self.provider = PROVIDER_SPACEXAI
+            self.personality.provider = self.provider
+        self.model = tag
         self.personality.model = self.model
-        self._ollama.model = self.model
+        self._sync_clients()
         self.save()
+
+    def set_provider(self, provider: str) -> str:
+        """Switch chat backend (ollama | spacexai). Returns the resolved id."""
+        resolved = normalize_provider(provider)
+        self.provider = resolved
+        self.personality.provider = resolved
+        if resolved == PROVIDER_SPACEXAI and (
+            not self.model or not looks_like_spacexai_model(self.model)
+        ):
+            self.model = SPACEXAI_DEFAULT_MODEL
+            self.personality.model = self.model
+        if resolved == PROVIDER_OLLAMA and looks_like_spacexai_model(self.model):
+            self.model = "llama3.1:8b"
+            self.personality.model = self.model
+        self._sync_clients()
+        self.save()
+        return resolved
 
     def time_since_last(self) -> str:
         """A human phrase for how long since they last spoke, or '' if never
@@ -463,7 +585,7 @@ class Clementine:
                             + (f" Focus on: {topic}." if topic else "")},
                 {"role": "user", "content": listing},
             ])
-        except requests.exceptions.RequestException:
+        except (requests.exceptions.RequestException, RuntimeError):
             return ("The model is offline, so here is everything as I keep it:\n\n"
                     + listing)
 
@@ -496,13 +618,15 @@ class Clementine:
         pieces = []
         failed = False
         try:
-            for piece in self._ollama.stream_chat(messages, temperature=self._temp()):
+            for piece in self._chat_backend().stream_chat(
+                messages, temperature=self._temp()
+            ):
                 pieces.append(piece)
                 yield piece
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, RuntimeError) as e:
             self.memory.conversation.pop()
             failed = True
-            yield user_facing_ollama_error(e, self.model)
+            yield self._user_facing_error(e)
         finally:
             if not failed:
                 reply = "".join(pieces)
@@ -541,7 +665,7 @@ class Clementine:
                             "than restating claims as established facts."},
                 {"role": "user", "content": transcript},
             ])
-        except requests.exceptions.RequestException:
+        except (requests.exceptions.RequestException, RuntimeError):
             return  # keep everything verbatim; try again next turn
 
         self.memory.summaries.append({

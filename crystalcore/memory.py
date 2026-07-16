@@ -18,6 +18,7 @@ class Personality:
     avatar: str = ""            # an emoji for this profile, e.g. "🌟"
     description: str = ""       # a short line about this profile
     model: str = ""             # this profile's preferred model ("" = default)
+    provider: str = ""          # "ollama" | "spacexai" ("" = default / ollama)
 
 
 @dataclass

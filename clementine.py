@@ -4,21 +4,24 @@ Clementine — terminal interface for the CrystalCore sovereign companion.
 The framework lives in the crystalcore/ package (memory, profiles, brain).
 This file is her doorway from the command line:
 
-    python clementine.py                    # default memory
+    python clementine.py                    # local Ollama (default)
     python clementine.py --profile Crystal  # a named profile
     python clementine.py --model llama3.2:3b
+    python clementine.py --provider spacexai --model grok-4.5
 
-Everything runs on your own device. Nothing leaves it.
+Default mode is fully local. SpaceXAI is opt-in for chat only (memory stays
+on disk). Requires XAI_API_KEY — see https://docs.x.ai
 """
 
 import argparse
+import os
 import sys
 import time
 
 # Re-exported so `from clementine import ...` keeps working everywhere.
 from crystalcore import (BASE_PROMPT, Clementine, Memory, Personality,  # noqa: F401
-                         delete_profile, list_profiles, profile_dir,
-                         profile_meta)
+                         delete_profile, list_profiles, load_dotenv,
+                         profile_dir, profile_meta, xai_api_key_present)
 
 HELP = """Commands:
   /name <name>      give her a name (or change it)
@@ -35,10 +38,12 @@ HELP = """Commands:
                      insights appear in /notes as r1, r2... — /forget rN removes one)
   /style <text>     tune her voice, e.g. /style more poetic, fewer questions
   /temp <0.0-1.5>   set temperature (playfulness)
-  /model <tag>      switch the local model, e.g. /model llama3.2:3b
-  /expose           dump local state (no cloud)
+  /model <tag>      switch model, e.g. /model llama3.2:3b or /model grok-4.5
+  /provider <name>  ollama (local, default) or spacexai (opt-in; needs XAI_API_KEY)
+  /expose           dump local state
   /exit             say goodbye (everything is saved automatically)
 """
+
 
 # One brief settle between pasted lines when delivery is chunked (e.g. SSH).
 # Never paid on ordinary typed messages — only after a paste line was drained.
@@ -133,14 +138,19 @@ def read_user_message(prompt: str = "You: ") -> str:
 
 
 def main():
+    load_dotenv()
     parser = argparse.ArgumentParser(
-        description="Clementine — a sovereign, locally-run AI companion.")
+        description="Clementine — a sovereign AI companion "
+                    "(local Ollama by default; SpaceXAI opt-in).")
     parser.add_argument(
         "--model", default="llama3.1:8b",
-        help="Ollama model tag. Pick one that fits your hardware, e.g. "
-             "llama3.1:8b (default, Q4_K_M — the sweet spot), "
-             "llama3.1:8b-instruct-q5_K_M (higher quality), or "
-             "llama3.2:3b (lighter machines).")
+        help="Model id. Ollama tags (e.g. llama3.1:8b) or SpaceXAI "
+             "(e.g. grok-4.5). Default is local llama3.1:8b.")
+    parser.add_argument(
+        "--provider", default="",
+        help="Chat backend: ollama (local) or spacexai (opt-in cloud chat; "
+             "needs XAI_API_KEY). Default: profile setting, then "
+             "CRYSTAL_PROVIDER env, then ollama.")
     parser.add_argument(
         "--memory-dir", default="clementine_memory",
         help="Where her memory is stored on this device.")
@@ -152,10 +162,24 @@ def main():
     if args.profile:
         args.memory_dir = profile_dir(args.profile)
 
-    print("Starting Clementine (local mode)...")
-    print("Make sure Ollama is running with a model loaded.\n")
+    provider = (args.provider or os.environ.get("CRYSTAL_PROVIDER", "")).strip()
+    companion = Clementine(
+        model=args.model,
+        memory_dir=args.memory_dir,
+        provider=provider,
+    )
 
-    companion = Clementine(model=args.model, memory_dir=args.memory_dir)
+    if companion.provider == "spacexai":
+        print("Starting Clementine (SpaceXAI mode — chat via api.x.ai)...")
+        print("Memory stays local.")
+        if xai_api_key_present():
+            print("XAI_API_KEY found.\n")
+        else:
+            print("WARNING: XAI_API_KEY not set — chat will fail until you add it "
+                  "(https://console.x.ai → .env).\n")
+    else:
+        print("Starting Clementine (local mode)...")
+        print("Make sure Ollama is running with a model loaded.\n")
 
     name = companion.personality.name or "Clementine"
     returning = bool(companion.memory.conversation or companion.memory.summaries)
@@ -163,7 +187,8 @@ def main():
     greeting = f"{name} is {'back with you' if returning else 'ready'}"
     if gap:
         greeting += f" — you last spoke {gap}"
-    print(f"{greeting}. Type /help for commands, /exit to quit.\n")
+    print(f"{greeting}  [{companion.provider} · {companion.model}]")
+    print("Type /help for commands, /exit to quit.\n")
 
     def dispatch(user_input: str) -> str | None:
         """Handle slash-commands. Returns 'exit' to quit, '' if handled,
@@ -229,7 +254,17 @@ def main():
             return ""
         if low.startswith("/model "):
             companion.set_model(user_input[7:])
-            print(f"[Now using model: {companion.model} — remembered for this profile]\n")
+            print(f"[Now using model: {companion.model} "
+                  f"(provider: {companion.provider}) — remembered for this profile]\n")
+            return ""
+        if low.startswith("/provider"):
+            rest = user_input[9:].strip()
+            if not rest:
+                print(f"[Provider: {companion.provider} · model: {companion.model}]\n")
+                return ""
+            resolved = companion.set_provider(rest)
+            print(f"[Provider: {resolved} · model: {companion.model} "
+                  f"— remembered for this profile]\n")
             return ""
         if low.startswith("/summary"):
             topic = user_input[8:].strip()
@@ -267,8 +302,12 @@ def main():
         companion.chat(user_input, stream_to=sys.stdout)
         print()
 
-    print(f"\n{name} sleeps. Your conversations stay on this device, in "
-          f"'{companion.memory_dir}/'. Non solus.")
+    if companion.provider == "spacexai":
+        print(f"\n{name} sleeps. Memory files stay in '{companion.memory_dir}/' "
+              f"(chat used SpaceXAI this session). Non solus.")
+    else:
+        print(f"\n{name} sleeps. Your conversations stay on this device, in "
+              f"'{companion.memory_dir}/'. Non solus.")
 
 
 if __name__ == "__main__":

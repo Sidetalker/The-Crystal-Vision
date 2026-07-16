@@ -36,7 +36,7 @@ This project does not claim, and its documents must never imply:
 ## Corrections and Promises
 
 - **Corrections are kept, not hidden.** When a claim proves wrong it is fixed in place, and the fix stays visible in git history. Being seen correcting yourself is the cost — and the proof — of honesty.
-- **Sovereignty promises are binding constraints on code, not marketing.** "Memory stays on your device," "everything is user-deletable," "the local page sends nothing anywhere" — any change that would break one of these is rejected regardless of what it offers in exchange. This has already been exercised (analytics were kept off the companion's local page; a cloud speech API was declined in favour of a future local one).
+- **Sovereignty promises are binding constraints on code, not marketing.** Default mode is local: "memory stays on your device," "everything is user-deletable," and the companion UI binds **127.0.0.1 only**. Any change that would break those defaults is rejected. **Exception (opt-in only):** when the human explicitly selects `provider=spacexai`, chat text is sent to `api.x.ai` for inference; memory files and embeddings still stay local, and the system prompt must say so honestly. Silent cloud is forbidden. Analytics stay off the companion page; cloud speech was declined in favour of a future local path.
 
 ---
 
