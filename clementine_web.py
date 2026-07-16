@@ -148,13 +148,15 @@ function chosenVoice(){
   const name = voicePick.value || localStorage.getItem('voiceName');
   return voices.find(v => v.name === name) || null;
 }
-function speak(text){
-  if (!voiceOn || !synth || !text.trim()) return;
+function speak(text, onDone){
+  if (!voiceOn || !synth || !text.trim()){ if (onDone) onDone(); return; }
   synth.cancel();                       // never let two replies overlap
   const u = new SpeechSynthesisUtterance(text);
   const v = chosenVoice();
   if (v){ u.voice = v; u.lang = v.lang; }
   u.rate = 1.0; u.pitch = 1.0;
+  u.onend = () => { if (onDone) onDone(); };
+  u.onerror = () => { if (onDone) onDone(); };
   synth.speak(u);
 }
 function stopSpeaking(){ if (synth) synth.cancel(); }
@@ -174,14 +176,25 @@ if (synth){
   voicePick.style.display = 'none';
 }
 
-// ---- her ears: speak to her instead of typing ----
+// ---- her ears: a hands-free back-and-forth conversation ----
+// One click starts conversation mode: she listens, you speak, she replies
+// aloud, then she listens again on her own — until you click to end it.
 const micBtn = document.getElementById('mic');
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recog = null, listening = false;
+let recog = null, listening = false, convoMode = false;
 function paintMic(){
-  micBtn.textContent = listening ? '🔴 listening…' : '🎤 talk';
-  micBtn.style.color = listening ? '#F87171' : '';
+  if (!convoMode){ micBtn.textContent = '🎤 talk'; micBtn.style.color = ''; return; }
+  micBtn.textContent = listening ? '🔴 listening… (click to end)'
+                                 : '🟣 in conversation (click to end)';
+  micBtn.style.color = listening ? '#F87171' : '#A78BFA';
 }
+function startListening(){
+  if (!recog || listening) return;
+  stopSpeaking();                      // don't let her voice feed back into the mic
+  try { recog.start(); } catch (_) {}
+}
+// Called after she finishes replying (and speaking); pick up the next turn.
+function resumeConversation(){ if (convoMode) startListening(); }
 if (SR){
   recog = new SR();
   recog.lang = 'en-US';
@@ -192,8 +205,9 @@ if (SR){
   recog.onerror = () => { listening = false; paintMic(); };
   recog.onend = () => {
     listening = false; paintMic();
-    const said = (finalText || boxEl.value).trim();
+    const said = (finalText || '').trim();
     if (said){ boxEl.value = said; document.getElementById('send').requestSubmit(); }
+    else if (convoMode){ startListening(); }   // stayed silent — keep listening
   };
   recog.onresult = (e) => {
     let interim = '';
@@ -204,9 +218,14 @@ if (SR){
     boxEl.value = (finalText + interim).trim();   // live preview in the box
   };
   micBtn.onclick = () => {
-    if (listening){ recog.stop(); return; }
-    stopSpeaking();                    // don't let her voice feed back into the mic
-    try { recog.start(); } catch (_) {}
+    convoMode = !convoMode;
+    if (convoMode){
+      if (!voiceOn){ voiceOn = true; localStorage.setItem('voiceOn','1'); paintVoiceBtn(); }
+      paintMic(); startListening();
+    } else {
+      if (listening) recog.stop();
+      stopSpeaking(); paintMic();
+    }
   };
 } else {
   micBtn.style.display = 'none';
@@ -239,7 +258,13 @@ async function refreshMems(){
 }
 let controller = null;
 const stopBtn = document.getElementById('stop');
-stopBtn.onclick = () => { if (controller) controller.abort(); stopSpeaking(); };
+stopBtn.onclick = () => {
+  if (controller) controller.abort();
+  stopSpeaking();
+  convoMode = false;                    // Stop ends the hands-free conversation
+  if (typeof recog !== 'undefined' && recog && listening) recog.stop();
+  if (typeof paintMic === 'function') paintMic();
+};
 const boxEl = document.getElementById('box');
 boxEl.oninput = () => {
   boxEl.style.height = 'auto';
@@ -273,9 +298,10 @@ document.getElementById('send').onsubmit = async (e) => {
       d.textContent += dec.decode(value, {stream: true});
       log.scrollTop = log.scrollHeight;
     }
-    speak(d.textContent);               // say the finished reply aloud
+    speak(d.textContent, resumeConversation);   // say it, then listen again
   } catch (err) {
     d.textContent += d.textContent ? ' — [stopped]' : '[stopped]';
+    resumeConversation();               // keep the conversation alive on a hiccup
   }
   stopBtn.style.display = 'none';
   controller = null;
