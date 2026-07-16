@@ -105,9 +105,12 @@ PAGE = """<!doctype html>
       <label style="display:block;margin-top:8px;color:var(--muted);font-size:.85rem">Chat provider
         <select id="pprovider" style="width:100%;margin-top:4px">
           <option value="ollama">ollama (local)</option>
-          <option value="spacexai">spacexai (xAI API)</option>
+          <option value="spacexai">spacexai (opt-in · xAI API)</option>
         </select>
       </label>
+      <p id="optinhint" style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">
+        SpaceXAI requires explicit opt-in: chat leaves this device; memory stays local.
+      </p>
       <button style="margin-top:8px">Save profile</button>
     </form>
     <div style="margin-top:14px">
@@ -317,14 +320,15 @@ function paintBackend(data){
   const prov = data.provider || 'ollama';
   const model = data.model || '';
   const keyOk = data.xai_key_present;
+  const opted = data.cloud_opt_in;
   const foot = document.getElementById('foot');
   const hint = document.getElementById('bindhint');
   if (prov === 'spacexai'){
-    hint.textContent = 'SpaceXAI · ' + model + (keyOk ? '' : ' · no key');
-    foot.textContent = 'Chat goes to api.x.ai (' + model + '). Memory files stay on this device. UI is 127.0.0.1 only. Non solus.';
+    hint.textContent = 'SpaceXAI · opted in · ' + model + (keyOk ? '' : ' · no key');
+    foot.textContent = 'You opted in: chat goes to api.x.ai (' + model + '). Memory files stay on this device. UI is 127.0.0.1 only. Non solus.';
   } else {
-    hint.textContent = 'local · 127.0.0.1';
-    foot.textContent = 'Everything on this page stays on your device. Her memory lives in a local folder you own. Non solus.';
+    hint.textContent = 'local · 127.0.0.1' + (opted ? ' · cloud opt-in saved but off' : '');
+    foot.textContent = 'Local mode. Everything on this page stays on your device unless you opt into SpaceXAI. Non solus.';
   }
   const psel = document.getElementById('pprovider');
   if (psel) psel.value = prov === 'spacexai' ? 'spacexai' : 'ollama';
@@ -383,12 +387,26 @@ document.getElementById('teach').onsubmit = async (e) => {
 };
 document.getElementById('pmeta').onsubmit = async (e) => {
   e.preventDefault();
+  const prov = document.getElementById('pprovider').value;
+  if (prov === 'spacexai'){
+    const ok = confirm(
+      'Opt in to SpaceXAI?\n\n' +
+      'Chat text will leave this device for api.x.ai.\n' +
+      'Memory files and embeddings stay local.\n' +
+      'You can switch back to ollama anytime.'
+    );
+    if (!ok){
+      document.getElementById('pprovider').value = 'ollama';
+      return;
+    }
+  }
   await fetch('/api/profile/meta', {method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({avatar: document.getElementById('pavatar').value.trim(),
                           description: document.getElementById('pdesc').value.trim(),
                           model: document.getElementById('pmodel').value.trim(),
-                          provider: document.getElementById('pprovider').value})});
+                          provider: prov,
+                          cloud_opt_in: prov === 'spacexai'})});
   refreshProfiles();
 };
 document.getElementById('reflectbtn').onclick = async () => {
@@ -541,6 +559,8 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
             "profiles": profiles,
             "provider": c.provider,
             "model": c.model,
+            "cloud_opt_in": bool(c.personality.cloud_opt_in),
+            "cloud_opt_in_at": c.personality.cloud_opt_in_at or "",
             "xai_key_present": xai_api_key_present(),
         })
 
@@ -555,9 +575,16 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
         if "provider" in data and str(data["provider"]).strip():
             c.set_provider(str(data["provider"]))
         if "model" in data and str(data["model"]).strip():
+            # set_model may re-opt-in if tag is grok-*; after set_provider is fine
             c.set_model(str(data["model"]))
         c.save()
-        return jsonify({"ok": True, "provider": c.provider, "model": c.model})
+        return jsonify({
+            "ok": True,
+            "provider": c.provider,
+            "model": c.model,
+            "cloud_opt_in": bool(c.personality.cloud_opt_in),
+            "cloud_opt_in_at": c.personality.cloud_opt_in_at or "",
+        })
 
     @app.post("/api/profile/delete")
     def profile_delete():
@@ -587,6 +614,8 @@ def create_app(companion: Clementine, port: int = 5000) -> Flask:
             "name": c.personality.name or "Clementine",
             "provider": c.provider,
             "model": c.model,
+            "cloud_opt_in": bool(c.personality.cloud_opt_in),
+            "cloud_opt_in_at": c.personality.cloud_opt_in_at or "",
             "xai_key_present": xai_api_key_present(),
         })
 

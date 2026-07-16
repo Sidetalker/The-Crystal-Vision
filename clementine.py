@@ -39,7 +39,9 @@ HELP = """Commands:
   /style <text>     tune her voice, e.g. /style more poetic, fewer questions
   /temp <0.0-1.5>   set temperature (playfulness)
   /model <tag>      switch model, e.g. /model llama3.2:3b or /model grok-4.5
-  /provider <name>  ollama (local, default) or spacexai (opt-in; needs XAI_API_KEY)
+  /provider <name>  ollama (local) or spacexai (records cloud opt-in; needs XAI_API_KEY)
+  /optin [spacexai] explicit opt-in: chat may leave this device for api.x.ai
+  /optout           revoke cloud opt-in; back to local Ollama
   /expose           dump local state
   /exit             say goodbye (everything is saved automatically)
 """
@@ -170,8 +172,10 @@ def main():
     )
 
     if companion.provider == "spacexai":
-        print("Starting Clementine (SpaceXAI mode — chat via api.x.ai)...")
-        print("Memory stays local.")
+        print("Starting Clementine (SpaceXAI — opted in; chat via api.x.ai)...")
+        print("Memory stays local. /optout to revoke.")
+        if companion.personality.cloud_opt_in_at:
+            print(f"Opt-in since {companion.personality.cloud_opt_in_at}.")
         if xai_api_key_present():
             print("XAI_API_KEY found.\n")
         else:
@@ -179,7 +183,8 @@ def main():
                   "(https://console.x.ai → .env).\n")
     else:
         print("Starting Clementine (local mode)...")
-        print("Make sure Ollama is running with a model loaded.\n")
+        print("Make sure Ollama is running with a model loaded.")
+        print("Optional cloud: /optin  (needs XAI_API_KEY)\n")
 
     name = companion.personality.name or "Clementine"
     returning = bool(companion.memory.conversation or companion.memory.summaries)
@@ -260,11 +265,28 @@ def main():
         if low.startswith("/provider"):
             rest = user_input[9:].strip()
             if not rest:
-                print(f"[Provider: {companion.provider} · model: {companion.model}]\n")
+                opt = "yes" if companion.personality.cloud_opt_in else "no"
+                when = companion.personality.cloud_opt_in_at or "—"
+                print(f"[Provider: {companion.provider} · model: {companion.model} "
+                      f"· cloud_opt_in={opt} · since {when}]\n")
                 return ""
             resolved = companion.set_provider(rest)
-            print(f"[Provider: {resolved} · model: {companion.model} "
-                  f"— remembered for this profile]\n")
+            if resolved == "spacexai":
+                print(f"[Opted in to SpaceXAI · model: {companion.model} "
+                      f"— chat may leave this device; memory stays local]\n")
+            else:
+                print(f"[Opted out · provider: {resolved} · model: {companion.model}]\n")
+            return ""
+        if low.startswith("/optin"):
+            rest = user_input[6:].strip() or "spacexai"
+            resolved = companion.opt_in_cloud(provider=rest)
+            print(f"[Opted in to {resolved} · model: {companion.model}]\n"
+                  f" Chat text may go to api.x.ai. Memory files stay in "
+                  f"'{companion.memory_dir}/'. /optout anytime.\n")
+            return ""
+        if low in ("/optout", "/opt-out"):
+            companion.opt_out_cloud()
+            print(f"[Cloud opt-in revoked · now local · model: {companion.model}]\n")
             return ""
         if low.startswith("/summary"):
             topic = user_input[8:].strip()

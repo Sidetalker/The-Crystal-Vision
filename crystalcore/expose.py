@@ -127,6 +127,8 @@ def companion_dump(c: Clementine, *, include_prompt: bool = True) -> dict[str, A
     out: dict[str, Any] = {
         "model": c.model,
         "provider": getattr(c, "provider", "ollama"),
+        "cloud_opt_in": bool(getattr(c.personality, "cloud_opt_in", False)),
+        "cloud_opt_in_at": getattr(c.personality, "cloud_opt_in_at", "") or "",
         "embed_model": c.embed_model,
         "memory_dir": str(Path(c.memory_dir).resolve()),
         "max_recent_turns": c.max_recent_turns,

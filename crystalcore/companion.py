@@ -122,20 +122,46 @@ class Clementine:
         self.personality = Personality()
         self.memory = Memory()
         self.load()
+        config_dirty = False
+        # Legacy: provider=spacexai without the new flag still counts as opted in.
+        if (normalize_provider(self.personality.provider) == PROVIDER_SPACEXAI
+                and not self.personality.cloud_opt_in):
+            self.personality.cloud_opt_in = True
+            if not self.personality.cloud_opt_in_at:
+                self.personality.cloud_opt_in_at = datetime.now().isoformat(
+                    timespec="seconds")
+            config_dirty = True
         if self.personality.model:  # a profile may prefer its own model
             model = self.personality.model
-        # Provider: explicit arg > saved profile > model-name heuristic > ollama
-        if provider:
-            resolved = normalize_provider(provider)
-        elif self.personality.provider:
-            resolved = normalize_provider(self.personality.provider)
-        elif looks_like_spacexai_model(model):
+        # Provider: explicit CLI/env arg (this session opt-in) >
+        # saved profile only when cloud_opt_in is true > ollama.
+        # Model-name heuristics alone never force cloud without consent.
+        explicit = normalize_provider(provider) if provider else ""
+        if explicit == PROVIDER_SPACEXAI:
+            resolved = PROVIDER_SPACEXAI
+            if not self.personality.cloud_opt_in:
+                config_dirty = True
+            self.personality.cloud_opt_in = True
+            if not self.personality.cloud_opt_in_at:
+                self.personality.cloud_opt_in_at = datetime.now().isoformat(
+                    timespec="seconds")
+                config_dirty = True
+            if self.personality.provider != PROVIDER_SPACEXAI:
+                config_dirty = True
+            self.personality.provider = PROVIDER_SPACEXAI
+        elif explicit == PROVIDER_OLLAMA and provider:
+            resolved = PROVIDER_OLLAMA
+        elif (self.personality.cloud_opt_in
+              and normalize_provider(self.personality.provider) == PROVIDER_SPACEXAI):
             resolved = PROVIDER_SPACEXAI
         else:
             resolved = PROVIDER_OLLAMA
         if resolved == PROVIDER_SPACEXAI and not looks_like_spacexai_model(model):
             # Chat must use a SpaceXAI model id; keep local tags only for Ollama.
             model = SPACEXAI_DEFAULT_MODEL
+            if self.personality.model != model:
+                self.personality.model = model
+                config_dirty = True
         self.model = model
         self.provider = resolved
         self.embed_model = embed_model
@@ -143,6 +169,8 @@ class Clementine:
         self._ollama = OllamaClient(model=model, embed_model=embed_model)
         self._spacexai = SpaceXAIClient(model=model)
         self._sync_clients()
+        if config_dirty:
+            self.save()
 
     # ---------- identity & memory ----------
 
@@ -507,38 +535,69 @@ class Clementine:
     def set_model(self, tag: str):
         """Switch the model and remember the choice for this profile.
 
-        If the tag looks like a SpaceXAI model (grok-*) and provider is still
-        local, auto-switch to spacexai so /model grok-4.5 just works.
+        Grok-style tags call opt_in_cloud so cloud is never silent.
         """
         tag = tag.strip()
         if tag.lower().startswith("xai:"):
             tag = tag[4:].strip()
-            self.provider = PROVIDER_SPACEXAI
-            self.personality.provider = self.provider
-        elif looks_like_spacexai_model(tag) and self.provider != PROVIDER_SPACEXAI:
-            self.provider = PROVIDER_SPACEXAI
-            self.personality.provider = self.provider
+            self.opt_in_cloud(model=tag)
+            return
+        if looks_like_spacexai_model(tag):
+            self.opt_in_cloud(model=tag)
+            return
+        # Local model tag: stay / go Ollama for chat (do not silently
+        # keep SpaceXAI with an Ollama-only tag). Consent history kept.
         self.model = tag
         self.personality.model = self.model
+        if self.provider == PROVIDER_SPACEXAI:
+            self.provider = PROVIDER_OLLAMA
+            self.personality.provider = PROVIDER_OLLAMA
         self._sync_clients()
         self.save()
 
-    def set_provider(self, provider: str) -> str:
-        """Switch chat backend (ollama | spacexai). Returns the resolved id."""
+    def opt_in_cloud(self, provider: str = PROVIDER_SPACEXAI,
+                     model: str = "") -> str:
+        """Explicit consent: allow SpaceXAI chat for this profile.
+
+        Records cloud_opt_in + timestamp, switches provider, and picks a
+        Grok model if needed. Memory and embeddings stay local.
+        """
         resolved = normalize_provider(provider)
+        if resolved != PROVIDER_SPACEXAI:
+            resolved = PROVIDER_SPACEXAI
+        self.personality.cloud_opt_in = True
+        self.personality.cloud_opt_in_at = datetime.now().isoformat(
+            timespec="seconds")
         self.provider = resolved
         self.personality.provider = resolved
-        if resolved == PROVIDER_SPACEXAI and (
-            not self.model or not looks_like_spacexai_model(self.model)
-        ):
+        if model and looks_like_spacexai_model(model):
+            self.model = model.strip()
+        elif not looks_like_spacexai_model(self.model):
             self.model = SPACEXAI_DEFAULT_MODEL
-            self.personality.model = self.model
-        if resolved == PROVIDER_OLLAMA and looks_like_spacexai_model(self.model):
+        self.personality.model = self.model
+        self._sync_clients()
+        self.save()
+        return resolved
+
+    def opt_out_cloud(self) -> str:
+        """Revoke cloud chat consent; return to local Ollama for this profile."""
+        self.personality.cloud_opt_in = False
+        # Keep cloud_opt_in_at as history of when they last consented.
+        self.provider = PROVIDER_OLLAMA
+        self.personality.provider = PROVIDER_OLLAMA
+        if looks_like_spacexai_model(self.model):
             self.model = "llama3.1:8b"
             self.personality.model = self.model
         self._sync_clients()
         self.save()
-        return resolved
+        return PROVIDER_OLLAMA
+
+    def set_provider(self, provider: str) -> str:
+        """Switch chat backend. spacexai path is an opt-in; ollama is opt-out."""
+        resolved = normalize_provider(provider)
+        if resolved == PROVIDER_SPACEXAI:
+            return self.opt_in_cloud()
+        return self.opt_out_cloud()
 
     def time_since_last(self) -> str:
         """A human phrase for how long since they last spoke, or '' if never
@@ -618,11 +677,21 @@ class Clementine:
         pieces = []
         failed = False
         try:
-            for piece in self._chat_backend().stream_chat(
-                messages, temperature=self._temp()
-            ):
-                pieces.append(piece)
-                yield piece
+            if (self.provider == PROVIDER_SPACEXAI
+                    and not self.personality.cloud_opt_in):
+                self.memory.conversation.pop()
+                failed = True
+                yield (
+                    "[SpaceXAI needs an explicit opt-in first. "
+                    "Type /optin or /provider spacexai — chat will leave "
+                    "this device for api.x.ai. Memory files stay local.]"
+                )
+            else:
+                for piece in self._chat_backend().stream_chat(
+                    messages, temperature=self._temp()
+                ):
+                    pieces.append(piece)
+                    yield piece
         except (requests.exceptions.RequestException, RuntimeError) as e:
             self.memory.conversation.pop()
             failed = True

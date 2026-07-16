@@ -19,6 +19,9 @@ class Personality:
     description: str = ""       # a short line about this profile
     model: str = ""             # this profile's preferred model ("" = default)
     provider: str = ""          # "ollama" | "spacexai" ("" = default / ollama)
+    # Explicit consent for cloud chat (SpaceXAI). Default False = local only.
+    cloud_opt_in: bool = False
+    cloud_opt_in_at: str = ""   # ISO timestamp when they last opted in
 
 
 @dataclass

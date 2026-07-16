@@ -31,7 +31,7 @@ clementine_web.py       local web interface
 |-----------|---------|--------|
 | **System Prompt** | Her core personality, rules, and values | ✅ Done |
 | **Local LLM Connection** | Connects to a model on the user's device via Ollama | ✅ Working (streaming) |
-| **SpaceXAI (opt-in)** | Optional chat via xAI API (`grok-4.5`); memory & embeddings stay local; web provider picker; per-profile provider; offline tests | ✅ Working (v0.13.1) |
+| **SpaceXAI (opt-in)** | Optional chat via xAI API (`grok-4.5`); requires explicit `/optin` or provider choice (consent + timestamp); memory & embeddings stay local | ✅ Working (v0.13.2) |
 | **Memory System** | Rolling short-term memory + auto-summarised long-term history + key-value facts + permanent notes | ✅ Working (v2) |
 | **Semantic Recall** | Finds relevant memories by *meaning* using local Ollama embeddings — no cloud, no PyTorch | ✅ Working (v3) |
 | **User Control** | Change her name, teach/forget/edit her memories, tag them, tune her voice | ✅ Working (`/name`, `/iam`, `/fact`, `/remember`, `/notes`, `/forget`, `/editnote`, `/style`, `/temp`) |

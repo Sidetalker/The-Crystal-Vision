@@ -65,6 +65,8 @@ class CompanionProviderTests(unittest.TestCase):
         self.assertEqual(c.provider, "spacexai")
         self.assertEqual(c.model, "grok-4.5")
         self.assertEqual(c.personality.provider, "spacexai")
+        self.assertTrue(c.personality.cloud_opt_in)
+        self.assertTrue(c.personality.cloud_opt_in_at)
         prompt = c.system_prompt()
         self.assertIn("opted in to SpaceXAI", prompt)
         self.assertNotIn("no connection to any external servers", prompt)
@@ -74,6 +76,7 @@ class CompanionProviderTests(unittest.TestCase):
         c.set_model("grok-4.5")
         self.assertEqual(c.provider, "spacexai")
         self.assertEqual(c.model, "grok-4.5")
+        self.assertTrue(c.personality.cloud_opt_in)
 
     def test_set_model_xai_prefix(self):
         c = Clementine(memory_dir=self.mem, provider="ollama")
@@ -81,12 +84,20 @@ class CompanionProviderTests(unittest.TestCase):
         self.assertEqual(c.provider, "spacexai")
         self.assertEqual(c.model, "grok-4.5")
 
+    def test_set_model_local_leaves_cloud_backend(self):
+        c = Clementine(memory_dir=self.mem, provider="spacexai")
+        self.assertEqual(c.provider, "spacexai")
+        c.set_model("llama3.2:3b")
+        self.assertEqual(c.provider, "ollama")
+        self.assertEqual(c.model, "llama3.2:3b")
+
     def test_set_provider_back_to_ollama(self):
         c = Clementine(memory_dir=self.mem, provider="spacexai")
         self.assertEqual(c.provider, "spacexai")
         c.set_provider("ollama")
         self.assertEqual(c.provider, "ollama")
         self.assertEqual(c.model, "llama3.1:8b")
+        self.assertFalse(c.personality.cloud_opt_in)
 
     def test_profile_persists_provider(self):
         c = Clementine(memory_dir=self.mem, provider="spacexai")
@@ -94,6 +105,20 @@ class CompanionProviderTests(unittest.TestCase):
         c2 = Clementine(memory_dir=self.mem, provider="")
         self.assertEqual(c2.provider, "spacexai")
         self.assertEqual(c2.model, "grok-4.5")
+        self.assertTrue(c2.personality.cloud_opt_in)
+
+    def test_no_cloud_without_consent_on_reload(self):
+        # Saved provider alone without opt-in is migrated to opt-in (legacy).
+        # Fresh ollama profile must not jump to cloud just for a grok model tag
+        # written without provider/opt-in.
+        cfg = Path(self.mem) / "config.json"
+        Path(self.mem).mkdir(parents=True, exist_ok=True)
+        cfg.write_text(
+            '{"name":"T","model":"grok-4.5","provider":"","cloud_opt_in":false}',
+            encoding="utf-8",
+        )
+        c = Clementine(memory_dir=self.mem, provider="")
+        self.assertEqual(c.provider, "ollama")
 
     def test_base_prompt_constants(self):
         self.assertIn("locally-run", BASE_PROMPT_LOCAL)
@@ -161,7 +186,7 @@ class ProfileMetaTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "0.13.1")
+        self.assertEqual(__version__, "0.13.2")
 
 
 if __name__ == "__main__":

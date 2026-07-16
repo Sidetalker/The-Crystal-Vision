@@ -19,7 +19,7 @@ from .companion import (
     PROVIDER_SPACEXAI,
     Clementine,
     normalize_provider,
-)
+)  # Clementine.opt_in_cloud / opt_out_cloud
 from .expose import (
     companion_dump,
     full_expose,
