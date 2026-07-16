@@ -118,22 +118,25 @@ What stays local: **memory files**, **embeddings**, **profiles**, and the web UI
 #    XAI_API_KEY=xai-...
 #    (see .env.example)
 
-# 2. Run with SpaceXAI
+# 2. Explicit opt-in, then chat with SpaceXAI
 python clementine.py --provider spacexai --model grok-4.5
-# Windows: double-click Start-Lumina-SpaceXAI.bat
-# Web UI: python clementine_web.py --provider spacexai
-#   then pick "spacexai" under This profile → Save
-# or mid-session:
+# Windows: double-click Start-Lumina-SpaceXAI.bat  (records opt-in)
+# Web: pick spacexai → confirm dialog → Save profile
+# Mid-session:
+#   /optin
 #   /provider spacexai
 #   /model grok-4.5
+# Revoke anytime:
+#   /optout
 ```
 
 | Switch | Meaning |
 |--------|---------|
 | `--provider ollama` | Local (default). Nothing leaves the machine. |
-| `--provider spacexai` | Chat via `https://api.x.ai/v1`. Needs `XAI_API_KEY`. |
-| `CRYSTAL_PROVIDER=spacexai` | Same as `--provider` without the flag. |
-| `/model grok-4.5` | Auto-selects SpaceXAI when the tag looks like a Grok model. |
+| `--provider spacexai` / `/optin` | Explicit opt-in; consent + timestamp on the profile. Chat via `api.x.ai`. Needs `XAI_API_KEY`. |
+| `CRYSTAL_PROVIDER=spacexai` | Same as `--provider` (records opt-in). |
+| `/model grok-4.5` | Records opt-in and selects SpaceXAI. |
+| `/optout` | Revoke consent; back to local Ollama. |
 
 Check current models and pricing: [docs.x.ai/developers/models](https://docs.x.ai/developers/models). Default SpaceXAI model in this project: **`grok-4.5`**.
 
