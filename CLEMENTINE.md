@@ -42,7 +42,8 @@ clementine_web.py       local web interface
 | **Per-Profile Model** | Each profile can prefer its own model (`/model` remembers; editable in the web profile card) | ✅ Working (v8) |
 | **Reflection** | She forms gentle, tentative insights about her human — on invitation (`/reflect`) and after long conversations. Always visible, always deletable (`/forget rN`) | ✅ Working (v10) |
 | **Voice** | Deferred deliberately: browser speech APIs send audio to cloud servers, which breaks sovereignty. Waiting on a local path (e.g. whisper.cpp) | ⬜ Planned (local-only) |
-| **Personality Layer** | Tone, warmth, chosen name, temperature, style guidance | 🟡 Basic layer working; emotional-tone tracking still to come |
+| **Personality Layer** | A full character core: warmth, gentle wit, feeling-under-the-words listening, one gentle question, presence before solutions, honest limits — plus chosen name, temperature, and style guidance | ✅ Working (v11) |
+| **Time Awareness** | She knows the present moment and how long since you last spoke ("you last spoke 3 days ago") — continuity you can feel, computed locally | ✅ Working (v11) |
 | **Privacy Controls** | Everything stays on-device in local files you own (git-ignored) | 🟡 Defined & enforced locally; on-disk encryption still to come |
 | **MLX / alternative backends** | Support for Apple MLX and other local runtimes | ⬜ Planned |
 | **Packaging** | An easy install for non-technical users | ⬜ Planned |

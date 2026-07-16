@@ -65,8 +65,11 @@ def main():
 
     name = companion.personality.name or "Clementine"
     returning = bool(companion.memory.conversation or companion.memory.summaries)
-    print(f"{name} is {'back with you' if returning else 'ready'}. "
-          f"Type /help for commands, /exit to quit.\n")
+    gap = companion.time_since_last()
+    greeting = f"{name} is {'back with you' if returning else 'ready'}"
+    if gap:
+        greeting += f" — you last spoke {gap}"
+    print(f"{greeting}. Type /help for commands, /exit to quit.\n")
 
     while True:
         try:
