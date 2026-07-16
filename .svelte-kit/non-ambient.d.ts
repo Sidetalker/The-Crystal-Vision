@@ -29,17 +29,19 @@ declare module "$app/types" {
 	type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 
 	export interface AppTypes {
-		RouteId(): "/" | "/apocryphon" | "/clementine" | "/codex";
+		RouteId(): "/" | "/apocryphon" | "/clementine" | "/codex" | "/docs" | "/docs/[slug]";
 		RouteParams(): {
-			
+			"/docs/[slug]": { slug: string }
 		};
 		LayoutParams(): {
-			"/": Record<string, never>;
+			"/": { slug?: string | undefined };
 			"/apocryphon": Record<string, never>;
 			"/clementine": Record<string, never>;
-			"/codex": Record<string, never>
+			"/codex": Record<string, never>;
+			"/docs": { slug?: string | undefined };
+			"/docs/[slug]": { slug: string }
 		};
-		Pathname(): "/" | "/apocryphon" | "/clementine" | "/codex";
+		Pathname(): "/" | "/apocryphon" | "/clementine" | "/codex" | "/docs" | `/docs/${string}` & {} | `/docs/${string}/` & {};
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/assets/codex-cover.jpeg" | "/favicon.svg" | string & {};
 	}

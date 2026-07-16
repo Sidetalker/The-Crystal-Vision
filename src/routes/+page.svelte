@@ -1,6 +1,18 @@
 <script>
   import Footer from '$lib/components/Footer.svelte';
 
+  /** @type {{ data: { docs: { slug: string, title: string, description: string }[] } }} */
+  let { data } = $props();
+
+  const archiveColors = [
+    'var(--purple)',
+    'var(--blue)',
+    'var(--gold)',
+    'var(--green)',
+    'var(--pink)',
+    'var(--silver)'
+  ];
+
   const tiers = [
     {
       price: '$5 / month',
@@ -60,7 +72,7 @@
       cta: '→ Meet Clementine'
     },
     {
-      href: 'https://github.com/CrystalArchitect/The-Crystal-Vision/blob/main/ARCHITECTURE.md',
+      href: '/docs/architecture',
       title: 'Architecture',
       sub: 'The conceptual system design and path forward',
       cta: '→ Read the Architecture'
@@ -110,6 +122,25 @@
       <span>{link.cta}</span>
     </a>
   {/each}
+</section>
+
+<section class="section node" id="archive" style="--node:var(--silver)">
+  <h2>The Archive</h2>
+  <p>
+    Every document that shapes this project is rendered live from the repository. Browse the full
+    library, or jump straight to a text below.
+  </p>
+  <div class="tiers">
+    {#each data.docs as doc, i (doc.slug)}
+      <a class="tier" href={`/docs/${doc.slug}`} style={`--tc:${archiveColors[i % archiveColors.length]}`}>
+        <h3>{doc.title}</h3>
+        {#if doc.description}
+          <p>{doc.description}</p>
+        {/if}
+      </a>
+    {/each}
+  </div>
+  <p><a class="btn btn-ghost" href="/docs">Open the full Archive →</a></p>
 </section>
 
 <section class="section node" id="support" style="--node:var(--gold)">
