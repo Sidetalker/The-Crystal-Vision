@@ -43,7 +43,7 @@ PAGE = """<!doctype html>
   .you{background:#141420;margin-left:auto}
   .her{background:var(--card);border:1px solid var(--line)}
   .her b{color:var(--purple)}
-  form#send{display:flex;gap:10px;padding:14px 20px;border-top:1px solid var(--line)}
+  form#send{display:flex;gap:10px;align-items:flex-end;padding:14px 20px;border-top:1px solid var(--line)}
   input,button,textarea{font:inherit;color:var(--ink);background:#0D0D18;
        border:1px solid var(--line);border-radius:8px;padding:10px}
   input{flex:1}
@@ -147,9 +147,11 @@ stopBtn.onclick = () => { if (controller) controller.abort(); };
 const boxEl = document.getElementById('box');
 boxEl.oninput = () => {
   boxEl.style.height = 'auto';
-  boxEl.style.height = Math.min(boxEl.scrollHeight, 160) + 'px';
+  // +2: scrollHeight excludes the 1px top/bottom borders of the border-box
+  boxEl.style.height = Math.min(boxEl.scrollHeight + 2, 160) + 'px';
 };
 boxEl.onkeydown = (e) => {
+  if (e.isComposing || e.keyCode === 229) return;  // IME composition: let Enter confirm the candidate
   if (e.key === 'Enter' && !e.shiftKey){
     e.preventDefault();
     document.getElementById('send').requestSubmit();

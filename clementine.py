@@ -39,18 +39,78 @@ HELP = """Commands:
   /exit             say goodbye (everything is saved automatically)
 """
 
-try:  # Windows console
-    import msvcrt
+# One brief settle between pasted lines when delivery is chunked (e.g. SSH).
+# Never paid on ordinary typed messages — only after a paste line was drained.
+PASTE_SETTLE_S = 0.03
 
-    def _stdin_has_pending() -> bool:
-        time.sleep(0.03)  # let the rest of a paste land in the buffer
-        return msvcrt.kbhit()
-except ImportError:  # POSIX
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+
+    _KEY_EVENT = 0x0001
+
+    class _KeyEventRecord(ctypes.Structure):
+        _fields_ = [("bKeyDown", wintypes.BOOL),
+                    ("wRepeatCount", wintypes.WORD),
+                    ("wVirtualKeyCode", wintypes.WORD),
+                    ("wVirtualScanCode", wintypes.WORD),
+                    ("UnicodeChar", wintypes.WCHAR),
+                    ("dwControlKeyState", wintypes.DWORD)]
+
+    class _EventUnion(ctypes.Union):
+        _fields_ = [("KeyEvent", _KeyEventRecord),
+                    ("_pad", ctypes.c_byte * 16)]
+
+    class _InputRecord(ctypes.Structure):
+        _fields_ = [("EventType", wintypes.WORD), ("Event", _EventUnion)]
+
+    def _complete_line_pending() -> bool:
+        """True only if a full Enter-terminated line is already buffered,
+        so the follow-up input() is guaranteed not to block. Peeks the
+        console input queue without consuming anything; a partially typed
+        next message (no Enter yet) is left untouched."""
+        k32 = ctypes.windll.kernel32
+        handle = k32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        count = wintypes.DWORD()
+        if not k32.GetNumberOfConsoleInputEvents(handle, ctypes.byref(count)) \
+                or count.value == 0:
+            return False  # not a real console (e.g. winpty) or nothing pending
+        records = (_InputRecord * count.value)()
+        read = wintypes.DWORD()
+        if not k32.PeekConsoleInputW(handle, records, count.value,
+                                     ctypes.byref(read)):
+            return False
+        return any(r.EventType == _KEY_EVENT
+                   and r.Event.KeyEvent.bKeyDown
+                   and r.Event.KeyEvent.UnicodeChar == "\r"
+                   for r in records[:read.value])
+else:
     import select
 
-    def _stdin_has_pending() -> bool:
-        time.sleep(0.03)
+    def _complete_line_pending() -> bool:
+        """True only if input() will not block. In the terminal's canonical
+        mode the kernel releases data one full line at a time, so a readable
+        stdin means a complete line is waiting."""
         return bool(select.select([sys.stdin], [], [], 0)[0])
+
+
+def _drain_pasted_lines(lines: list) -> None:
+    """Append every already-complete buffered line to `lines`. Deterministic:
+    reads only what the console proves is there, so it never blocks and never
+    steals a half-typed next message. Ctrl+C just stops the drain."""
+    drained = False
+    try:
+        while True:
+            pending = _complete_line_pending()
+            if not pending and drained:
+                time.sleep(PASTE_SETTLE_S)  # bridge chunked paste delivery
+                pending = _complete_line_pending()
+            if not pending:
+                return
+            lines.append(input())
+            drained = True
+    except (EOFError, KeyboardInterrupt):
+        return  # keep what was already entered
 
 
 def read_user_message(prompt: str = "You: ") -> str:
@@ -58,18 +118,16 @@ def read_user_message(prompt: str = "You: ") -> str:
 
     A paste arrives as several buffered lines; without this, each line
     would become its own message and its own model round-trip, polluting
-    her memory. Commands (/...) are always single-line.
+    her memory. The drain always runs, so no pasted line can leak into a
+    later turn — and a command (/...) only executes when it was entered
+    alone, never from inside a paste.
     """
     first = input(prompt)
-    if not first.strip() or first.strip().startswith("/"):
-        return first.strip()
     lines = [first]
     if sys.stdin.isatty():
-        while _stdin_has_pending():
-            try:
-                lines.append(input())
-            except EOFError:
-                break
+        _drain_pasted_lines(lines)
+    if len(lines) == 1:
+        return first.strip()
     return "\n".join(lines).strip()
 
 

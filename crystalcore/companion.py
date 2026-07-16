@@ -134,22 +134,28 @@ class Clementine:
         if total <= MAX_MEMORIES or not query:
             return self._grouped_memory(fact_items, note_items)
 
-        # Large memory: try to recall by meaning.
+        # Large memory: try to recall by meaning. Each line keeps its
+        # provenance label so recall never blurs taught facts, kept notes,
+        # and what was merely mentioned — the grouped path makes the same
+        # distinction with its headers.
         self._ensure_embeddings()
         q = self._embed(query)
+        labelled = ([("taught", d, s) for d, s in fact_items]
+                    + [("asked to remember", d, s) for d, s in note_items])
         scored = []
-        for display, store in fact_items + note_items:
+        for label, display, store in labelled:
             emb = store.get("embedding")
             if q is not None and emb:
                 stamp = store.get("when") or store.get("updated")
                 score = self._cosine(q, emb) * self._recency_factor(stamp)
-                scored.append((score, display))
+                scored.append((score, f"{display}  [{label}]"))
         if q is None or not scored:
             return self._grouped_memory(fact_items, note_items)  # graceful fallback
 
         scored.sort(key=lambda s: s[0], reverse=True)
         top = "\n".join(f"- {display}" for _, display in scored[:MAX_MEMORIES])
-        return f"Most relevant things you remember about your human:\n{top}"
+        return ("Most relevant things your human has shared with you "
+                "(labels show how each was given to you):\n" + top)
 
     @staticmethod
     def _grouped_memory(fact_items, note_items) -> str:
