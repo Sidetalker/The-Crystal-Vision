@@ -69,6 +69,9 @@ PAGE = """<!doctype html>
 <body>
 <header><div><span id="heravatar"></span> <b id="hername">{{ name }}</b> · sovereign companion</div>
 <div style="display:flex;gap:8px;align-items:center">
+  <button class="small" id="voicebtn" type="button" aria-pressed="false"
+    title="Speak her replies aloud (on-device voice)">🔇 voice</button>
+  <select id="voicepick" title="Which voice she speaks with" style="max-width:150px"></select>
   <select id="profiles" title="Profile — separate person, separate memory"></select>
   <input id="newprofile" placeholder="new profile" size="9">
   <button class="small" id="mkprofile" type="button">create</button>
@@ -116,6 +119,59 @@ function bubble(who, text){
   log.appendChild(d); log.scrollTop = log.scrollHeight;
   return d;
 }
+
+// ---- her voice: on-device speech synthesis (no install, nothing leaves) ----
+const synth = window.speechSynthesis;
+let voiceOn = localStorage.getItem('voiceOn') === '1';
+let voices = [];
+const voiceBtn = document.getElementById('voicebtn');
+const voicePick = document.getElementById('voicepick');
+function paintVoiceBtn(){
+  voiceBtn.textContent = (voiceOn ? '🔊' : '🔇') + ' voice';
+  voiceBtn.setAttribute('aria-pressed', voiceOn ? 'true' : 'false');
+}
+function loadVoices(){
+  if (!synth) return;
+  voices = synth.getVoices();
+  const saved = localStorage.getItem('voiceName') || '';
+  voicePick.innerHTML = '';
+  voices.forEach((v, i) => {
+    const o = document.createElement('option');
+    o.value = v.name;
+    o.textContent = v.name + (v.lang ? ' (' + v.lang + ')' : '');
+    if (v.name === saved) o.selected = true;
+    voicePick.appendChild(o);
+  });
+}
+function chosenVoice(){
+  const name = voicePick.value || localStorage.getItem('voiceName');
+  return voices.find(v => v.name === name) || null;
+}
+function speak(text){
+  if (!voiceOn || !synth || !text.trim()) return;
+  synth.cancel();                       // never let two replies overlap
+  const u = new SpeechSynthesisUtterance(text);
+  const v = chosenVoice();
+  if (v){ u.voice = v; u.lang = v.lang; }
+  u.rate = 1.0; u.pitch = 1.0;
+  synth.speak(u);
+}
+function stopSpeaking(){ if (synth) synth.cancel(); }
+if (synth){
+  paintVoiceBtn();
+  loadVoices();
+  synth.onvoiceschanged = loadVoices;   // voices load async in most browsers
+  voiceBtn.onclick = () => {
+    voiceOn = !voiceOn;
+    localStorage.setItem('voiceOn', voiceOn ? '1' : '0');
+    if (!voiceOn) stopSpeaking();
+    paintVoiceBtn();
+  };
+  voicePick.onchange = () => localStorage.setItem('voiceName', voicePick.value);
+} else {
+  voiceBtn.style.display = 'none';
+  voicePick.style.display = 'none';
+}
 async function refreshMems(){
   const r = await fetch('/api/memories'); const data = await r.json();
   const box = document.getElementById('mems'); box.innerHTML = '';
@@ -144,7 +200,7 @@ async function refreshMems(){
 }
 let controller = null;
 const stopBtn = document.getElementById('stop');
-stopBtn.onclick = () => { if (controller) controller.abort(); };
+stopBtn.onclick = () => { if (controller) controller.abort(); stopSpeaking(); };
 const boxEl = document.getElementById('box');
 boxEl.oninput = () => {
   boxEl.style.height = 'auto';
@@ -178,6 +234,7 @@ document.getElementById('send').onsubmit = async (e) => {
       d.textContent += dec.decode(value, {stream: true});
       log.scrollTop = log.scrollHeight;
     }
+    speak(d.textContent);               // say the finished reply aloud
   } catch (err) {
     d.textContent += d.textContent ? ' — [stopped]' : '[stopped]';
   }
