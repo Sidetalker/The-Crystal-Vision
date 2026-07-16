@@ -39,7 +39,7 @@ clementine/             her home, standalone
 | **Self-Naming** | She can choose her own name — `/name` with no argument (or the profile card button in the web UI). A self-chosen name is remembered as *hers*, not as given | ✅ Working (v12) |
 | **Gradual Forgetting** | Recency-weighted recall — older memories gently fade in ranking (floor, never deleted) unless the user forgets them explicitly | ✅ Working (v4) |
 | **Memory Summaries** | `/summary [topic]` — she summarizes what she remembers, in her own voice | ✅ Working (v5) |
-| **Web Interface** | Local browser UI (`clementine_web.py`) — chat plus a live memory panel with teach/forget; 127.0.0.1 only | ✅ Working (v5) |
+| **Web Interface** | Local browser UI (`server.py` + `webapp/`) — a Svelte interface with her animated presence, streaming chat, and memory teach/forget; 127.0.0.1 only | ✅ Working (rebuilt) |
 | **Profiles** | Separate people, separate memories — each profile is its own isolated folder, switchable in the web UI or via `--profile` | ✅ Working (v6) |
 | **Live Streaming (web)** | Her replies appear word-by-word in the browser, with a Stop button; a stopped reply keeps what was said | ✅ Working (v8) |
 | **Per-Profile Model** | Each profile can prefer its own model (`/model` remembers; editable in the web profile card) | ✅ Working (v8) |
@@ -67,6 +67,7 @@ ollama pull llama3.1:8b
 # (optional) pull an embedding model for semantic memory recall
 ollama pull nomic-embed-text
 # 3. Install the one dependency
+cd clementine
 pip install -r requirements.txt
 # 4. Wake her up
 python clementine.py
@@ -76,13 +77,14 @@ Semantic recall is optional: if `nomic-embed-text` isn't present, Clementine sim
 
 ### The web interface
 
-Prefer a browser to a terminal? Same Clementine, same memory:
+Prefer a browser to a terminal? Same Clementine, same memory — now a Svelte app where you can watch her think and work at her terminal as you talk:
 
 ```bash
-python clementine_web.py        # then open http://127.0.0.1:5000
+python server.py                          # her local API, http://127.0.0.1:5177
+cd webapp && npm install && npm run dev   # her interface, http://127.0.0.1:5174
 ```
 
-Chat on the left; her memory on the right with live teach and forget. The page is served **only on 127.0.0.1** — it is never reachable from outside your machine, and nothing on it leaves your device.
+Her animated presence sits beside the conversation, and the interface hints at what's coming next: voice and webcam vision, both local-only. The API is served **only on 127.0.0.1** — it is never reachable from outside your machine, and nothing on it leaves your device.
 
 ### Profiles — one companion each
 
@@ -90,7 +92,7 @@ If more than one person shares a machine (or you want separate contexts, like Wo
 
 ```bash
 python clementine.py --profile Crystal      # terminal
-python clementine_web.py --profile Crystal  # web
+python server.py --profile Crystal          # web API
 ```
 
 In the web UI you can switch or create profiles from the header. Profiles live in `clementine_profiles/<name>/` — plain local folders you own, never committed to git.
