@@ -437,17 +437,15 @@ class Clementine:
                     + self.memory.conversation)
         try:
             reply = self._ollama_chat(messages, stream_to=stream_to)
-        except requests.exceptions.ConnectionError:
-            self.memory.conversation.pop()  # keep history consistent for re-send
-            return ("[I can't reach my local model — is Ollama running? "
-                    f"Try: ollama serve, then ollama pull {self.model}]")
-        except requests.exceptions.Timeout:
-            self.memory.conversation.pop()
-            return ("[That took too long — the model may still be loading. "
-                    "Give it a moment and try again.]")
         except requests.exceptions.RequestException as e:
-            self.memory.conversation.pop()
-            return f"[Error talking to the local model: {e}]"
+            self.memory.conversation.pop()  # keep history consistent for re-send
+            msg = self._offline_message(e)
+            if stream_to is not None:
+                # In streaming mode the caller prints the stream, not the
+                # return value — deliver the message there or she goes silent.
+                stream_to.write(msg + "\n")
+                stream_to.flush()
+            return msg
 
         self.memory.conversation.append({"role": "assistant", "content": reply})
         self._touch()
@@ -469,20 +467,10 @@ class Clementine:
             for piece in self._ollama_stream(messages):
                 pieces.append(piece)
                 yield piece
-        except requests.exceptions.ConnectionError:
-            self.memory.conversation.pop()
-            finalized = True
-            yield ("[I can't reach my local model — is Ollama running? "
-                   f"Try: ollama serve, then ollama pull {self.model}]")
-        except requests.exceptions.Timeout:
-            self.memory.conversation.pop()
-            finalized = True
-            yield ("[That took too long — the model may still be loading. "
-                   "Give it a moment and try again.]")
         except requests.exceptions.RequestException as e:
             self.memory.conversation.pop()
             finalized = True
-            yield f"[Error talking to the local model: {e}]"
+            yield self._offline_message(e)
         finally:
             if not finalized:
                 reply = "".join(pieces)
@@ -494,6 +482,19 @@ class Clementine:
                 else:
                     self.memory.conversation.pop()
                 self.save()
+
+    def _offline_message(self, e: requests.exceptions.RequestException) -> str:
+        """A kind, actionable message for when the local model is unreachable.
+        ConnectionError is checked first: ConnectTimeout subclasses both
+        ConnectionError and Timeout, and 'is Ollama running?' is the right
+        question for it."""
+        if isinstance(e, requests.exceptions.ConnectionError):
+            return ("[I can't reach my local model — is Ollama running? "
+                    f"Try: ollama serve, then ollama pull {self.model}]")
+        if isinstance(e, requests.exceptions.Timeout):
+            return ("[That took too long — the model may still be loading. "
+                    "Give it a moment and try again.]")
+        return f"[Error talking to the local model: {e}]"
 
     def _ollama_stream(self, messages):
         """Yield reply pieces from the local model as they are generated."""
