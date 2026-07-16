@@ -12,7 +12,8 @@ can switch between them freely. Nothing leaves your device.
 import argparse
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, render_template_string, request
+from flask import (Flask, Response, abort, jsonify, render_template_string,
+                   request)
 
 from crystalcore import (Clementine, delete_profile, full_expose, list_profiles,
                          profile_dir, profile_meta)
@@ -269,9 +270,48 @@ def _profile_of(companion: Clementine) -> str:
     return p.name if p.parent == Path(_profiles.PROFILES_DIR) else "default"
 
 
-def create_app(companion: Clementine) -> Flask:
+# The only names a loopback-bound server should ever answer to. A browser on a
+# malicious page can be made to resolve some attacker-controlled domain to
+# 127.0.0.1 (DNS rebinding) and then fetch http://127.0.0.1:<port>/… — the OS
+# socket accepts it, but the browser still sends the *attacker's* domain in the
+# Host header. Refusing any Host that isn't loopback closes that hole without
+# any new dependency. See main()/create_app for how the port is supplied.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
+
+def _host_is_local(host_header: str, port: int) -> bool:
+    """True only for a loopback hostname with no port or the expected port."""
+    h = (host_header or "").strip()
+    if not h:
+        return False
+    if h.startswith("["):                       # IPv6 literal: [::1] or [::1]:5000
+        end = h.find("]")
+        if end == -1:
+            return False
+        hostname, rest = h[:end + 1], h[end + 1:]
+        port_part = rest[1:] if rest.startswith(":") else ""
+    else:
+        name, sep, maybe_port = h.rpartition(":")
+        if sep and maybe_port.isdigit():
+            hostname, port_part = name, maybe_port
+        else:
+            hostname, port_part = h, ""
+    if hostname not in _LOOPBACK_HOSTS:
+        return False
+    return not port_part or port_part == str(port)
+
+
+def create_app(companion: Clementine, port: int = 5000) -> Flask:
     app = Flask(__name__)
     holder = {"c": companion}  # swapped in place when the profile changes
+
+    @app.before_request
+    def _reject_foreign_host():
+        # Guards every route, including the private /api/expose dumps, against
+        # DNS-rebinding reads from a malicious website. Loopback callers (the
+        # human at their own machine) are unaffected.
+        if not _host_is_local(request.host, port):
+            abort(403, description="This companion answers on localhost only.")
 
     @app.get("/")
     def home():
@@ -437,7 +477,7 @@ def main():
         args.memory_dir = profile_dir(args.profile)
 
     companion = Clementine(model=args.model, memory_dir=args.memory_dir)
-    app = create_app(companion)
+    app = create_app(companion, port=args.port)
     name = companion.personality.name or "Clementine"
     print(f"{name} is at home: open http://127.0.0.1:{args.port}")
     print("Local only — nothing leaves this device. Ctrl+C to say goodnight.")
