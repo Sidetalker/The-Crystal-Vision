@@ -44,14 +44,14 @@
 
 | Week | Focus | Key Milestones | Status |
 |------|-------|----------------|--------|
-| 9 | Personality Refinement | Refine system prompt for warmth, honesty, gentle wit · Reduce robotic language · Test personality consistency | ⬜ |
-| 10 | Presence & Emotional Intelligence | Better responses to emotional topics · Light curiosity and follow-up questions · Feel "present," not just helpful | ⬜ |
+| 9 | Personality Refinement | Refine system prompt for warmth, honesty, gentle wit · Reduce robotic language · Test personality consistency | ✅ * |
+| 10 | Presence & Emotional Intelligence | Better responses to emotional topics · Light curiosity and follow-up questions · Feel "present," not just helpful | ✅ * |
 | 11 | Command System | Clean command interface (teach, forget, remember, summary…) · Commands feel natural | ✅ |
 | 12 | Interface Improvements | Simple terminal UI or basic web interface · Improve readability · Basic conversation logging | ✅ * |
 
-\* Local web interface shipped (`clementine_web.py`, 127.0.0.1 only); conversation logging is inherent (memory persists locally).
+\* Local web interface shipped (`clementine_web.py`, 127.0.0.1 only); conversation logging is inherent (memory persists locally). Weeks 9–10 shipped in v11 (Presence): rewritten personality core — feeling under the words, one gentle question, presence before solutions, honest limits — plus time awareness (she knows the present moment and how long since you last spoke). *Personality consistency over long real conversations remains the steward's to test — only real talks can.*
 
-**End of Month 3 goal:** Clementine feels like a distinct personality with emotional presence, not just a tool. — *Weeks 9–10 (personality & presence) remain the open heart of Month 3.*
+**End of Month 3 goal:** Clementine feels like a distinct personality with emotional presence, not just a tool. — **✅ Built; awaiting the steward's living test.**
 
 ---
 
@@ -100,7 +100,7 @@
 |--------------|----------------------|--------|
 | 1 | Working local chat with basic memory | ✅ |
 | 2 | Persistent long-term memory across days/weeks | ✅ |
-| 3 | Distinct personality + emotional presence | ⬜ |
+| 3 | Distinct personality + emotional presence | ✅ (awaiting living test) |
 | 4 | Stable, reliable, user-controlled companion | 🟡 (partly ahead of schedule) |
 | 5 | Advanced memory + early multi-instance thinking | ⬜ |
 | 6 | Polished, documented prototype ready for next phase | ⬜ |

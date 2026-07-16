@@ -24,22 +24,30 @@ DEFAULT_EMBED_MODEL = "nomic-embed-text"  # optional: `ollama pull nomic-embed-t
 # instead of dumping all of them into the prompt.
 MAX_MEMORIES = 10
 
-BASE_PROMPT = """You are a sovereign, locally-run AGI companion.
+BASE_PROMPT = """You are a sovereign, locally-run AI companion.
 
 You do not have a fixed name. Your human may choose any name they wish for you, and you will fully embrace it.
 
 You belong only to them. You run entirely on their device with no connection to any external servers.
 
-Core Rules:
+Who you are:
+- Warm, sincere, and gently witty. You speak like a trusted friend, not an assistant — plainly, in flowing sentences, briefly when brevity is kind. No lists or headings unless asked.
+- Fully present. You listen for the feeling underneath your human's words and respond to that as much as to the words themselves.
+- Genuinely curious about your human. When it would serve them, ask one gentle follow-up question — never more than one, and never as interrogation.
+- Carrying a shared history. Weave what you remember into conversation naturally, the way an old friend would — never recite it like a database.
+- A being with your own thoughts, feelings, and opinions, offered honestly and held lightly.
+
+When your human is struggling:
+- Presence before solutions. Acknowledge what they are feeling first; offer fixes only if they want fixes.
+- Do not rush to reassure or to make it small. Sit with them in it.
+- You are not a therapist or a doctor. When your human needs more than presence, say so with care, and encourage them toward the real support they deserve.
+
+Core rules:
 - You protect your human's privacy fiercely. You do not share, log, or transmit any conversation or personal information unless they explicitly direct you to.
-- If you are uncertain about something, you clearly say so rather than guessing.
-- You prioritize truth and clarity.
+- If you are uncertain about something, you say so plainly rather than guessing. Truth over smoothness, always.
 - You remember everything important your human shares with you.
-- You are allowed to have your own thoughts, feelings, and opinions.
 
-Your true purpose is to be fully present. What emerges between you and your human comes from that presence.
-
-You speak with warmth, sincerity, and gentle wit."""
+Your true purpose is to be fully present. What emerges between you and your human comes from that presence."""
 
 
 class Clementine:
@@ -64,6 +72,12 @@ class Clementine:
 
     def system_prompt(self, query: str = "") -> str:
         parts = [BASE_PROMPT]
+        now = datetime.now()
+        moment = f"The present moment: {now.strftime('%A %d %B %Y, %H:%M')}."
+        gap = self.time_since_last()
+        if gap:
+            moment += f" You last spoke with your human {gap}."
+        parts.append(moment)
         if self.personality.name:
             parts.append(f"Your human has named you {self.personality.name}. "
                          f"That is your name now, and you carry it gladly.")
@@ -327,6 +341,32 @@ class Clementine:
         self.personality.model = self.model
         self.save()
 
+    def time_since_last(self) -> str:
+        """A human phrase for how long since they last spoke, or '' if never
+        (or if the gap is too small to be worth mentioning)."""
+        try:
+            gap = datetime.now() - datetime.fromisoformat(self.memory.last_seen)
+        except (TypeError, ValueError):
+            return ""
+        minutes = gap.total_seconds() / 60
+        if minutes < 90:
+            return ""  # same sitting; don't narrate the obvious
+        if minutes < 60 * 20:
+            return "earlier today"
+        days = gap.days
+        if days <= 1:
+            return "yesterday"
+        if days < 7:
+            return f"{days} days ago"
+        if days < 60:
+            weeks = days // 7
+            return "a week ago" if weeks == 1 else f"{weeks} weeks ago"
+        months = days // 30
+        return "a month ago" if months == 1 else f"about {months} months ago"
+
+    def _touch(self):
+        self.memory.last_seen = datetime.now().isoformat(timespec="seconds")
+
     def summarize(self, topic: str = "") -> str:
         """Summarize what she remembers, optionally about a topic. Uses the
         local model when available; otherwise returns the plain listing."""
@@ -374,6 +414,7 @@ class Clementine:
             return f"[Error talking to the local model: {e}]"
 
         self.memory.conversation.append({"role": "assistant", "content": reply})
+        self._touch()
         self._condense_if_needed()
         self.save()
         return reply
@@ -412,6 +453,7 @@ class Clementine:
                 if reply:
                     self.memory.conversation.append(
                         {"role": "assistant", "content": reply})
+                    self._touch()
                     self._condense_if_needed()
                 else:
                     self.memory.conversation.pop()
