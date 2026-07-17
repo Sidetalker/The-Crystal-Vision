@@ -292,24 +292,45 @@ document.getElementById('send').onsubmit = async (e) => {
   const msg = boxEl.value.trim(); if (!msg) return;
   boxEl.value = ''; boxEl.style.height = 'auto';
   bubble('you', msg);
-  const d = bubble('her', '');
+  const d = bubble('her', '…');
   controller = new AbortController();
   stopBtn.style.display = 'inline-block';
   try {
     const r = await fetch('/api/chat/stream', {method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({message: msg}), signal: controller.signal});
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    while (true){
-      const {done, value} = await reader.read();
-      if (done) break;
-      d.textContent += dec.decode(value, {stream: true});
-      log.scrollTop = log.scrollHeight;
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.text()).slice(0, 400); } catch (_) {}
+      d.textContent = '[error ' + r.status + '] ' +
+        (detail || 'Chat request failed. Is Lumina still running on 127.0.0.1?');
+      resumeConversation();
+    } else if (!r.body) {
+      d.textContent = '[error] No response body (try http://127.0.0.1:5000 not another host).';
+      resumeConversation();
+    } else {
+      d.textContent = '';
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      while (true){
+        const {done, value} = await reader.read();
+        if (done) break;
+        d.textContent += dec.decode(value, {stream: true});
+        log.scrollTop = log.scrollHeight;
+      }
+      if (!d.textContent.trim()) {
+        d.textContent = '[empty reply] Backend returned nothing. Try again, or switch provider to ollama in the sidebar.';
+      }
+      speak(d.textContent, resumeConversation);   // say it, then listen again
     }
-    speak(d.textContent, resumeConversation);   // say it, then listen again
   } catch (err) {
-    d.textContent += d.textContent ? ' — [stopped]' : '[stopped]';
+    if (err && err.name === 'AbortError') {
+      d.textContent += d.textContent && d.textContent !== '…' ? ' — [stopped]' : '[stopped]';
+    } else {
+      const why = (err && err.message) ? err.message : String(err || 'network error');
+      d.textContent = '[connection error] ' + why +
+        ' — open http://127.0.0.1:5000 (not 0.0.0.0 / not phone on Wi‑Fi).';
+    }
     resumeConversation();               // keep the conversation alive on a hiccup
   }
   stopBtn.style.display = 'none';
@@ -706,7 +727,8 @@ def main():
         print("Local only — chat via Ollama. Ctrl+C to say goodnight.")
     # Never bind beyond localhost, never enable the debugger: the UI is
     # reachable from this machine alone (chat may leave if SpaceXAI is on).
-    app.run(host="127.0.0.1", port=args.port, debug=False)
+    # threaded=True so a long SpaceXAI stream does not freeze the whole UI.
+    app.run(host="127.0.0.1", port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

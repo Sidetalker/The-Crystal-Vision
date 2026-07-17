@@ -325,6 +325,9 @@ def main():
         if result is not None:
             continue
 
+        # Immediate feedback — model load/reply can take 10–60s on local Ollama.
+        # Without this, the console looks frozen and feels like "no response".
+        print(f"[{name} is thinking — wait, first reply can take up to a minute…]")
         print(f"{name}: ", end="", flush=True)
         companion.chat(user_input, stream_to=sys.stdout)
         print()
