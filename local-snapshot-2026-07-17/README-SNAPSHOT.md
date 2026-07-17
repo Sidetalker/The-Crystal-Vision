@@ -13,29 +13,41 @@ development is future work.
 | `README.md`, `CLEMENTINE.md`, `GOVERNANCE.md`, `MILESTONES.md`, `BRIDGE.md` | Updated docs from the local **CrystalCore v0.13.x** line (SpaceXAI opt-in provider, voice) |
 | `clementine.py` | Terminal companion, v0.13.x — adds `/provider`, `/optin`, `/optout`, `/expose`, multi-line paste handling |
 | `clementine_web.py` | Single-file local web UI, v0.13.x — on-device voice (speech synthesis + mic), provider picker, transparency endpoints (`/api/expose`, `/api/conversation`, `/api/prompt`) |
-| `crystalcore/` | Partial package snapshot (older generation): `__init__.py`, `__main__.py`, `companion.py`, `memory.py`, `expose.py` |
+| `crystalcore/` | **Complete, working package** (see recovery notes below): `__init__.py`, `__main__.py`, `companion.py`, `memory.py`, `expose.py`, `node.py`, `ollama.py`, `version.py`, `profiles.py` |
 | `site/` | Updated static site for teraustralis.com.au (index, crystalcore, codex, apocryphon, clementine pages + CSS + CNAME) |
 | `seven-sisters/` | The Seven Sisters Songline documents and CrystalCore protocol pack (manuals, path logs, water brief, transmit pack, landing page) |
 | `.env.example` | Template for the SpaceXAI opt-in key (`XAI_API_KEY`). **Never commit a real `.env`.** |
 | `Start*.bat` | Windows launchers (local Ollama, web UI, SpaceXAI mode) |
 | `_clean_memory.py` | One-shot local memory cleanup utility |
 
-## Known-incomplete: missing source files
+## Recovery notes (2026-07-17, after the initial snapshot)
 
-The v0.13.x code in this snapshot **does not run as-is**. `crystalcore/__init__.py` and
-`clementine.py` import modules that were never uploaded before the machine went back:
+The four missing modules of the `crystalcore/` package were recovered or
+reconstructed, and the package now **imports and runs** (verified on Python 3.12:
+all 32 `__all__` exports resolve; the node pipeline and `full_expose()` were
+exercised end-to-end). The uploaded `.pyc` bytecode files were confirmed to match
+the uploaded sources exactly, which pins this package generation precisely.
 
-- `crystalcore/node.py`
-- `crystalcore/ollama.py`
-- `crystalcore/version.py`
+| File | Provenance | Fidelity |
+|---|---|---|
+| `node.py` | **Recovered from `node.cpython312.pyc` bytecode** | Verified faithful: recompiling it reproduces all 30 code objects of the original bytecode (names, signatures, constants, logic) |
+| `ollama.py` | **Reconstructed** from the pre-refactor HTTP code in `clementine/crystalcore/companion.py` + the exact interface required by the recovered modules | Behavior-accurate; comment wording not original |
+| `version.py` | **Reconstructed** — original left no trace | Version string `0.12.0` is a placeholder; exact number unrecoverable |
+| `profiles.py` | Copied from `clementine/crystalcore/profiles.py` (this repository) | Exports exactly match what `__init__.py` imports |
+
+## Still missing (v0.13.x generation only)
+
+The newer v0.13.x entry points (`clementine.py`, `clementine_web.py`) additionally
+reference code that left no bytecode and cannot be recovered:
+
 - `crystalcore/status.py`
 - the SpaceXAI provider module (and `load_dotenv` / `xai_api_key_present` helpers)
 - `tests/` (including `tests/test_provider.py`)
 - `cli/crystalcore.ps1` (referenced by the protocol pack)
 
-Only compiled `.pyc` bytecode for some of these was uploaded; bytecode is not committed.
-If the local machine (or a backup) is ever available again, recovering those files is
-the first priority.
+So: the `crystalcore/` package here is whole and functional; the v0.13.x
+`clementine.py` / `clementine_web.py` will not import until the provider layer is
+recovered from the original machine or a backup — or reimplemented.
 
 ## Relationship to the rest of the repository
 
