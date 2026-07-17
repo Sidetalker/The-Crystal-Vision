@@ -1,12 +1,3 @@
-# Node / SvelteKit
-node_modules/
-/.svelte-kit/
-/build/
-.vercel/
-.output/
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -23,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-/lib/
-/lib64/
+lib/
+lib64/
 parts/
 sdist/
 var/
@@ -156,11 +147,6 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
-# Secrets — never commit
-auth.json
-credentials*
-*.pem
-
 # Environments
 .env
 .envrc
@@ -235,3 +221,8 @@ __marimo__/
 clementine_memory.json
 clementine_memory/
 clementine_profiles/
+
+# Local tooling / one-shots
+_clean_memory.py
+__pycache__/
+
