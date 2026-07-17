@@ -1,37 +1,65 @@
-# crystalcore v0.13 — recovery in progress
+# crystalcore v0.13.4 — COMPLETE and verified
 
-This folder holds the **v0.13.x generation** of the CrystalCore package (the
-SpaceXAI opt-in line), uploaded directly from the local machine on 2026-07-17.
-It is being assembled here so nothing is lost before the laptop is reset.
+This folder is the **v0.13.4 generation** of the CrystalCore package (the
+SpaceXAI opt-in line), recovered in full on 2026-07-17 before the local
+machine was reset. **The package is complete: it imports and runs.**
 
-## Present (uploaded, verbatim)
+## How it was recovered
 
-- `__init__.py` — v0.13 exports (adds SpaceXAI + envutil surface)
-- `__main__.py` — `python -m crystalcore` → status board / expose
-- `companion.py` — the full brain: local Ollama default + SpaceXAI opt-in with
-  explicit consent (`cloud_opt_in`, timestamps, per-provider honest prompts)
-- `envutil.py` — `.env` loader + `xai_api_key_present()`
-- `expose.py` — v0.13 transparency dump (knows about spacexai + status modules)
+Five modules were uploaded as source (`__init__.py`, `__main__.py`,
+`companion.py`, `envutil.py`, `expose.py`). The rest existed only as compiled
+Python 3.12 bytecode (`.pyc`), which was uploaded and decompiled back to source:
 
-## Carried forward (generation-compatible)
+| Module | Source | Bytecode-fidelity check |
+|---|---|---|
+| `__init__.py` | uploaded | matches `.pyc` (1/1 code objects) |
+| `__main__.py` | uploaded | matches `.pyc` |
+| `companion.py` | uploaded | matches `.pyc` (64/64) |
+| `envutil.py` | uploaded | matches `.pyc` (3/3) |
+| `expose.py` | uploaded | matches `.pyc` (11/11) |
+| `memory.py` | **recovered from bytecode** | recompiles to matching `.pyc` (3/3) |
+| `node.py` | **recovered from bytecode** | recompiles to matching `.pyc` (30/30) |
+| `ollama.py` | **recovered from bytecode** | recompiles to matching `.pyc` (7/7) |
+| `profiles.py` | **recovered from bytecode** | recompiles to matching `.pyc` (7/7) |
+| `spacexai.py` | **recovered from bytecode** | recompiles to matching `.pyc` (9/9) |
+| `status.py` | **recovered from bytecode** | recompiles to matching `.pyc` (6/6) |
+| `version.py` | **recovered from bytecode** | matches `.pyc`; exact string `0.13.4` |
 
-- `node.py`, `ollama.py`, `profiles.py` — copied from the recovered package one
-  folder up. `__init__.py`/`companion.py` import the same names from these, so
-  they fit v0.13 unchanged.
+"Recovered from bytecode" means the decompiled source was recompiled and its
+code-object structure (names, arguments, constants, control flow) reproduces
+the original `.pyc` exactly. Comment/formatting wording is reconstructed, not
+guaranteed byte-identical to the lost source; behavior is.
 
-## STILL NEEDED before this package will import
+## Verified working (Python 3.12)
 
-Three files are imported by the code above but have not been uploaded yet:
+- `import crystalcore` succeeds; all 44 `__all__` exports resolve
+- Provider plumbing: `normalize_provider`, `looks_like_spacexai_model`,
+  `SpaceXAIClient` (targets `https://api.x.ai/v1/chat/completions`)
+- Consent flow: `opt_in_cloud()` / `opt_out_cloud()` set and clear
+  `cloud_opt_in` correctly; no key present → local Ollama fallback
+- `IncognitaNode.process()` pipeline runs end-to-end
+- `full_expose()` returns its dump; `python -m crystalcore.status` prints
+  the live board
+- The two entry points (`../clementine.py`, `../clementine_web.py`) import
+  against this package and the Flask web app builds with all 15 routes
 
-- **`spacexai.py`** — the SpaceXAI (xAI API) client. Imported by `__init__.py`,
-  `companion.py`, `expose.py` for: `SpaceXAIClient`, `BASE_URL`, `DEFAULT_MODEL`,
-  `looks_like_spacexai_model`, `user_facing_spacexai_error`.
-- **`status.py`** — the live status board. Imported by `__main__.py`
-  (`from .status import main`).
-- **`memory.py` (v0.13)** — `companion.py` sets `personality.provider`,
-  `personality.cloud_opt_in`, and `personality.cloud_opt_in_at`, so the
-  `Personality` dataclass in this generation has those fields. The older
-  `memory.py` one folder up does **not**, so the v0.13 version is needed.
+## To run it
 
-Until those three arrive (from the laptop or a backup), this folder preserves
-everything received but does not yet run.
+Place this folder as `crystalcore/` next to `clementine.py` and
+`clementine_web.py` (both one level up in this snapshot), then:
+
+```
+pip install -r requirements.txt      # flask, requests
+python clementine.py                 # terminal, local Ollama
+python clementine_web.py             # web UI at http://127.0.0.1:5000
+python -m crystalcore.status         # live status board
+```
+
+SpaceXAI is opt-in: set `XAI_API_KEY` (see `../.env.example`) and
+`python clementine.py --provider spacexai --model grok-4.5`.
+
+## Relationship to the sibling `../crystalcore/` folder
+
+`../crystalcore/` holds an **earlier generation** recovered before the v0.13
+bytecode arrived (it lacks the SpaceXAI provider, self-naming, and status
+board). This folder supersedes it. Nothing here is missing anymore.
