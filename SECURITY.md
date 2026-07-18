@@ -1,21 +1,28 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Rolling: the latest `main` is the supported version.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+Please report privately via GitHub → **Security** tab → **Report a vulnerability**
+(private vulnerability reporting). If that is unavailable, open an issue titled
+"security contact request" **without details** and a private channel will be arranged.
+You can expect an acknowledgement within 7 days. Please do not disclose publicly
+until a fix has shipped.
 
-Use this section to tell people how to report a vulnerability.
+## Safety measures in this repo
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+- **Clementine is local-first** (`crystalcore-app/`): the companion runs on the
+  user's own device via Ollama by default; memory and profiles stay on disk.
+- **Cloud is opt-in only**: the xAI provider requires an explicit `/optin` and can
+  be revoked with `/optout`; opt-in state is recorded locally.
+- **No telemetry** — the app phones home to no one.
+- **No secrets committed** — `.gitignore` blocks `.env`, keys, and credentials;
+  `XAI_API_KEY` is read from the environment only.
+
+## Scope
+
+Reports about the Clementine companion app, the SvelteKit site, memory/privacy
+handling, or leaked credentials are all in scope.
